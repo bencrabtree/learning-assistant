@@ -109,23 +109,45 @@ def handle_discover(args):
     This will:
     1. Query arXiv API for recent papers
     2. Save them to the database
-    3. Optionally trigger analysis
+    3. Optionally trigger analysis with LangGraph workflow
 
     Example:
         python main.py --discover --days 1
+        python main.py --discover --days 1 --analyze
     """
     logger.info(f"Discovering papers from the last {args.days} day(s)...")
 
-    # Import here to avoid circular dependencies and speed up CLI startup
-    from src.agents.discovery.arxiv_searcher import discover_papers
-
     try:
-        papers = discover_papers(days_back=args.days)
-        logger.info(f"✅ Discovered {len(papers)} papers")
-
         if args.analyze:
-            logger.info("Starting analysis...")
-            handle_analyze(args)
+            # Use full LangGraph workflow (discovery + analysis + explanation)
+            logger.info("Running full pipeline with LangGraph...")
+            from src.graph import run_full_pipeline
+
+            result = run_full_pipeline(
+                days_back=args.days,
+                max_papers=getattr(args, 'max_papers', None)
+            )
+
+            # Show results
+            stats = result.get("stats", {})
+            logger.info("=" * 60)
+            logger.info("PIPELINE RESULTS:")
+            logger.info(f"  Discovered: {stats.get('discovered_count', 0)} papers")
+            logger.info(f"  Analyzed:   {stats.get('analyzed_count', 0)} papers")
+            logger.info(f"  Explained:  {stats.get('explained_count', 0)} papers")
+            logger.info("=" * 60)
+
+            # Check for errors
+            if result.get("errors"):
+                logger.warning(f"Errors encountered: {result['errors']}")
+
+        else:
+            # Just discovery (no analysis)
+            from src.agents.discovery import discover_papers
+
+            papers = discover_papers(days_back=args.days)
+            logger.info(f"✅ Discovered {len(papers)} papers")
+            logger.info("Use --analyze flag to run analysis pipeline")
 
     except Exception as e:
         logger.error(f"❌ Discovery failed: {e}")
@@ -142,14 +164,59 @@ def handle_analyze(args):
     1. Reader agent - Extract structured information
     2. Explainer agent - Generate learning-friendly explanations
 
+    This command analyzes papers that are already in the database
+    (discovered but not yet analyzed).
+
     Example:
         python main.py --analyze
     """
-    logger.info("Analyzing papers with Claude...")
+    logger.info("Analyzing unanalyzed papers with Claude...")
 
-    # TODO: Implement analysis pipeline
-    # This will be built in Week 1, Day 3
-    logger.warning("Analysis not yet implemented (coming in Day 3)")
+    from src.models.paper import Paper
+    from src.database import get_db_session
+    from src.agents.reader import ReaderAgent
+    from src.agents.explainer import ExplainerAgent
+
+    try:
+        # Find papers that haven't been analyzed
+        with get_db_session() as db:
+            unanalyzed = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
+
+        if not unanalyzed:
+            logger.info("No unanalyzed papers found")
+            logger.info("Run: python main.py --discover --days 1")
+            return
+
+        logger.info(f"Found {len(unanalyzed)} papers to analyze")
+
+        # Step 1: Analyze with Reader agent
+        logger.info("Step 1/2: Running Reader agent...")
+        reader = ReaderAgent()
+        reader_count = reader.analyze_and_save(unanalyzed)
+
+        # Step 2: Explain with Explainer agent
+        logger.info("Step 2/2: Running Explainer agent...")
+        with get_db_session() as db:
+            analyzed = db.query(Paper).filter(
+                Paper.analyzed_at.isnot(None),
+                Paper.explained_at.is_(None)
+            ).all()
+
+        explainer = ExplainerAgent()
+        explainer_count = explainer.explain_and_save(analyzed)
+
+        # Show results
+        logger.info("=" * 60)
+        logger.info("ANALYSIS RESULTS:")
+        logger.info(f"  Analyzed:  {reader_count} papers")
+        logger.info(f"  Explained: {explainer_count} papers")
+        logger.info("=" * 60)
+
+    except Exception as e:
+        logger.error(f"❌ Analysis failed: {e}")
+        if settings.log_level == "DEBUG":
+            logger.exception("Full traceback:")
+        sys.exit(1)
 
 
 def handle_digest(args):
@@ -286,6 +353,13 @@ Examples:
         type=int,
         default=1,
         help="How many days back to search (default: 1)"
+    )
+
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="Maximum number of papers to process (for testing)"
     )
 
     # Analysis commands
