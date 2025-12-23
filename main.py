@@ -28,7 +28,11 @@ from src.database import (
     get_database_stats,
     drop_all_tables,
 )
-from src.graph import run_full_pipeline, run_analysis_pipeline
+from src.graph import (
+    run_full_pipeline,
+    run_analysis_pipeline,
+    run_discovery_only_pipeline,
+)
 
 
 # ============================================================================
@@ -147,14 +151,18 @@ def handle_discover(args):
                 logger.warning(f"Errors encountered: {result['errors']}")
 
         else:
-            # Discovery only (still uses workflow for consistency)
-            # TODO: Create a discovery-only workflow in graph.py
-            # For now, use the discovery agent directly as a temporary measure
-            from src.agents.discovery import discover_papers
+            # Discovery only - uses LangGraph workflow for consistency
+            result = run_discovery_only_pipeline(days_back=args.days)
 
-            papers = discover_papers(days_back=args.days)
-            logger.info(f"✅ Discovered {len(papers)} papers")
+            # Show results
+            stats = result.get("stats", {})
+            count = stats.get('discovered_count', 0)
+            logger.info(f"✅ Discovered {count} papers")
             logger.info("Use --analyze flag to run full analysis pipeline")
+
+            # Check for errors
+            if result.get("errors"):
+                logger.warning(f"Errors encountered: {result['errors']}")
 
     except Exception as e:
         logger.error(f"❌ Discovery failed: {e}")

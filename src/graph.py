@@ -439,6 +439,75 @@ def run_full_pipeline(
         raise
 
 
+def run_discovery_only_pipeline(
+    days_back: int = 1,
+    categories: Optional[List[str]] = None,
+    max_papers: Optional[int] = None,
+) -> AgentState:
+    """
+    Run discovery pipeline without analysis.
+
+    This workflow:
+    1. Discovers papers from arXiv
+    2. Saves them to database
+    3. Returns without analyzing
+
+    Use this when you just want to find and store papers for later processing.
+
+    Args:
+        days_back: How many days back to search
+        categories: Which arXiv categories to search
+        max_papers: Maximum number of papers to process
+
+    Returns:
+        State with discovered papers
+
+    Example:
+        result = run_discovery_only_pipeline(days_back=7)
+        papers = result["discovered_papers"]
+        print(f"Found {len(papers)} papers")
+    """
+    logger.info("🚀 Starting discovery-only pipeline...")
+
+    # Create a discovery-only workflow
+    workflow = StateGraph(AgentState)
+    workflow.add_node("discovery", discovery_node)
+
+    workflow.set_entry_point("discovery")
+    workflow.add_edge("discovery", END)
+
+    app = workflow.compile()
+
+    # Set up initial state
+    initial_state: AgentState = {
+        "days_back": days_back,
+        "categories": categories,
+        "max_papers": max_papers,
+        "discovered_papers": None,
+        "analyzed_papers": None,
+        "explained_papers": None,
+        "final_papers": None,
+        "errors": [],
+        "stats": {},
+    }
+
+    # Execute workflow
+    try:
+        final_state = app.invoke(initial_state)
+
+        logger.info("✅ Discovery pipeline complete!")
+        logger.info(f"Stats: {final_state.get('stats', {})}")
+
+        if final_state.get("errors"):
+            logger.warning(f"Errors encountered: {final_state['errors']}")
+
+        return final_state
+
+    except Exception as e:
+        logger.error(f"❌ Discovery pipeline failed: {e}")
+        raise
+
+
 def run_analysis_pipeline() -> AgentState:
     """
     Run analysis pipeline on existing papers in database.
