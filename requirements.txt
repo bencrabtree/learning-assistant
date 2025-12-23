@@ -1,0 +1,33 @@
+# Core LangGraph and LLM
+langgraph>=0.3.0
+langchain>=0.1.0
+anthropic>=0.18.0
+
+# Data and Storage
+sqlalchemy>=2.0.0
+redis>=5.0.0
+
+# Discovery APIs
+arxiv>=2.1.0
+tweepy>=4.14.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+semanticscholar>=0.8.0
+
+# Graph and Visualization
+networkx>=3.2.0
+pyvis>=0.3.0
+plotly>=5.18.0
+
+# Dashboard
+streamlit>=1.29.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+loguru>=0.7.0
+apscheduler>=3.10.0
+
+# Testing
+pytest>=7.4.0
+black>=24.0.0
