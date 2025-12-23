@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(
         ...,  # ... means this field is REQUIRED
         alias="ANTHROPIC_API_KEY",
-        description="API key for Claude AI from console.anthropic.com"
+        description="API key for Claude AI from console.anthropic.com",
     )
 
     # ============================================================================
@@ -47,13 +47,13 @@ class Settings(BaseSettings):
     twitter_bearer_token: Optional[str] = Field(
         default=None,
         alias="TWITTER_BEARER_TOKEN",
-        description="Twitter API v2 bearer token (optional, for social signals)"
+        description="Twitter API v2 bearer token (optional, for social signals)",
     )
 
     semantic_scholar_api_key: Optional[str] = Field(
         default=None,
         alias="SEMANTIC_SCHOLAR_API_KEY",
-        description="Semantic Scholar API key (optional, increases rate limits)"
+        description="Semantic Scholar API key (optional, increases rate limits)",
     )
 
     # ============================================================================
@@ -61,45 +61,41 @@ class Settings(BaseSettings):
     # ============================================================================
 
     smtp_host: str = Field(
-        default="smtp.gmail.com",
-        alias="SMTP_HOST",
-        description="SMTP server hostname"
+        default="smtp.gmail.com", alias="SMTP_HOST", description="SMTP server hostname"
     )
 
     smtp_port: int = Field(
         default=587,
         alias="SMTP_PORT",
-        description="SMTP server port (587 for TLS, 465 for SSL)"
+        description="SMTP server port (587 for TLS, 465 for SSL)",
     )
 
     smtp_username: Optional[str] = Field(
-        default=None,
-        alias="SMTP_USERNAME",
-        description="Email address to send from"
+        default=None, alias="SMTP_USERNAME", description="Email address to send from"
     )
 
     smtp_password: Optional[str] = Field(
         default=None,
         alias="SMTP_PASSWORD",
-        description="Email password or app-specific password"
+        description="Email password or app-specific password",
     )
 
     email_recipient: Optional[str] = Field(
         default=None,
         alias="EMAIL_RECIPIENT",
-        description="Email address to send digests to"
+        description="Email address to send digests to",
     )
 
     recipient_email: Optional[str] = Field(
         default=None,
         alias="RECIPIENT_EMAIL",
-        description="Email address to send digests to (alternative field name)"
+        description="Email address to send digests to (alternative field name)",
     )
 
     lab_twitter_accounts: Optional[str] = Field(
         default=None,
         alias="LAB_TWITTER_ACCOUNTS",
-        description="Comma-separated list of Twitter accounts to track"
+        description="Comma-separated list of Twitter accounts to track",
     )
 
     # ============================================================================
@@ -109,13 +105,13 @@ class Settings(BaseSettings):
     research_interests: str = Field(
         default="machine learning,deep learning,natural language processing,computer vision",
         alias="RESEARCH_INTERESTS",
-        description="Comma-separated list of research topics"
+        description="Comma-separated list of research topics",
     )
 
     arxiv_categories: str = Field(
         default="cs.AI,cs.LG,cs.CL,cs.CV",
         alias="ARXIV_CATEGORIES",
-        description="Comma-separated arXiv category codes"
+        description="Comma-separated arXiv category codes",
     )
 
     # ============================================================================
@@ -125,7 +121,7 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="sqlite:///data/papers.db",
         alias="DATABASE_URL",
-        description="SQLAlchemy database URL"
+        description="SQLAlchemy database URL",
     )
 
     # ============================================================================
@@ -135,25 +131,25 @@ class Settings(BaseSettings):
     reader_model: str = Field(
         default="claude-3-5-haiku-20241022",
         alias="READER_MODEL",
-        description="Claude model for reading papers (use Haiku for cost efficiency)"
+        description="Claude model for reading papers (use Haiku for cost efficiency)",
     )
 
     explainer_model: str = Field(
         default="claude-3-5-sonnet-20241022",
         alias="EXPLAINER_MODEL",
-        description="Claude model for explanations (use Sonnet for quality)"
+        description="Claude model for explanations (use Sonnet for quality)",
     )
 
     max_papers_per_digest: int = Field(
         default=5,
         alias="MAX_PAPERS_PER_DIGEST",
-        description="How many papers to include in daily email"
+        description="How many papers to include in daily email",
     )
 
     discovery_days_back: int = Field(
         default=1,
         alias="DISCOVERY_DAYS_BACK",
-        description="How many days back to search for papers"
+        description="How many days back to search for papers",
     )
 
     # ============================================================================
@@ -163,11 +159,12 @@ class Settings(BaseSettings):
     log_level: str = Field(
         default="INFO",
         alias="LOG_LEVEL",
-        description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+        description="Logging level (DEBUG, INFO, WARNING, ERROR)",
     )
 
     class Config:
         """Pydantic configuration"""
+
         # Tell pydantic where to find the .env file
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -187,6 +184,7 @@ settings = Settings()
 # ============================================================================
 # Helper functions
 # ============================================================================
+
 
 def get_research_interests_list() -> list[str]:
     """

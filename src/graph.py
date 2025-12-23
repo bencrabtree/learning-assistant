@@ -50,6 +50,7 @@ from src.agents.explainer import explain_papers_batch
 # State Definition
 # ============================================================================
 
+
 class AgentState(TypedDict):
     """
     Shared state that flows through the agent workflow.
@@ -122,6 +123,7 @@ class AgentState(TypedDict):
 # ============================================================================
 # Node Functions - Each node does specific work
 # ============================================================================
+
 
 def discovery_node(state: AgentState) -> AgentState:
     """
@@ -316,6 +318,7 @@ def explainer_node(state: AgentState) -> AgentState:
 # Graph Construction
 # ============================================================================
 
+
 def create_workflow() -> StateGraph:
     """
     Create the LangGraph workflow.
@@ -373,6 +376,7 @@ def create_workflow() -> StateGraph:
 # ============================================================================
 # Convenience functions
 # ============================================================================
+
 
 def run_full_pipeline(
     days_back: int = 1,

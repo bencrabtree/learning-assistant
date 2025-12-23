@@ -45,11 +45,7 @@ class DiscoveryAgent:
     Follows the same class-based pattern as ReaderAgent, ExplainerAgent, and CuratorAgent.
     """
 
-    def __init__(
-        self,
-        categories: Optional[List[str]] = None,
-        max_results: int = 1000
-    ):
+    def __init__(self, categories: Optional[List[str]] = None, max_results: int = 1000):
         """
         Initialize the Discovery agent.
 
@@ -59,7 +55,9 @@ class DiscoveryAgent:
         """
         self.categories = categories or get_arxiv_categories_list()
         self.max_results = max_results
-        logger.debug(f"DiscoveryAgent initialized with categories={self.categories}, max_results={max_results}")
+        logger.debug(
+            f"DiscoveryAgent initialized with categories={self.categories}, max_results={max_results}"
+        )
 
     def build_query(self) -> str:
         """
@@ -108,7 +106,9 @@ class DiscoveryAgent:
             for paper in papers:
                 print(paper["title"])
         """
-        logger.info(f"Fetching papers from arXiv (categories={self.categories}, days_back={days_back})")
+        logger.info(
+            f"Fetching papers from arXiv (categories={self.categories}, days_back={days_back})"
+        )
 
         # Calculate date cutoff
         # We only want papers published after this date
@@ -139,7 +139,9 @@ class DiscoveryAgent:
                 # result.published is a datetime object
                 if result.published < cutoff_date:
                     # Papers are sorted by date, so we can stop here
-                    logger.debug(f"Reached papers older than cutoff ({result.published}), stopping")
+                    logger.debug(
+                        f"Reached papers older than cutoff ({result.published}), stopping"
+                    )
                     break
 
                 # Extract metadata
@@ -252,7 +254,9 @@ class DiscoveryAgent:
         # Use config defaults if not specified
         days_back = days_back or settings.discovery_days_back
 
-        logger.info(f"Starting paper discovery (days_back={days_back}, categories={self.categories})")
+        logger.info(
+            f"Starting paper discovery (days_back={days_back}, categories={self.categories})"
+        )
 
         try:
             # Step 1: Fetch from arXiv
@@ -275,7 +279,9 @@ class DiscoveryAgent:
                 arxiv_ids = [p["arxiv_id"] for p in paper_dicts]
                 papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
 
-            logger.info(f"✅ Discovery complete! Found {len(papers)} papers ({num_saved} new)")
+            logger.info(
+                f"✅ Discovery complete! Found {len(papers)} papers ({num_saved} new)"
+            )
             return papers
 
         except Exception as e:
@@ -286,6 +292,7 @@ class DiscoveryAgent:
 # ============================================================================
 # Standalone functions for backward compatibility and LangGraph integration
 # ============================================================================
+
 
 def discover_papers(
     days_back: Optional[int] = None,
@@ -326,6 +333,7 @@ def discover_papers(
 # Deprecated: Legacy functions for backward compatibility
 # These are wrappers around DiscoveryAgent methods
 
+
 def build_arxiv_query(categories: List[str], days_back: int = 1) -> str:
     """
     Build an arXiv API query string.
@@ -338,9 +346,7 @@ def build_arxiv_query(categories: List[str], days_back: int = 1) -> str:
 
 
 def fetch_papers_from_arxiv(
-    categories: List[str],
-    days_back: int = 1,
-    max_results: int = 1000
+    categories: List[str], days_back: int = 1, max_results: int = 1000
 ) -> List[Dict]:
     """
     Fetch papers from arXiv API.

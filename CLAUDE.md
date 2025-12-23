@@ -100,7 +100,46 @@ def handle_discover(args):
     # This belongs in graph.py!
 ```
 
-### 4. Consistency Checklist
+### 4. Test Bug Fixes, Don't Comment Them
+
+**Write unit tests for bug fixes instead of adding inline comments.**
+
+❌ **WRONG:**
+```python
+# Fix: arxiv library uses 'summary' not 'abstract'
+paper_data = {
+    "abstract": result.summary.strip(),  # Bug fix: was result.abstract
+}
+```
+
+✅ **CORRECT:**
+Just fix the code cleanly
+```python
+paper_data = {
+    "abstract": result.summary.strip(),
+}
+```
+
+**Then add a test in `tests/`:**
+```python
+def test_arxiv_result_parsing():
+    """Ensure we correctly parse arXiv API Result objects."""
+    mock_result = Mock()
+    mock_result.summary = "This is the abstract"
+
+    agent = DiscoveryAgent()
+    paper_data = agent._parse_result(mock_result)
+
+    assert paper_data["abstract"] == "This is the abstract"
+```
+
+**Why:**
+- Comments for trivial bugs bloat the codebase
+- Tests prevent regressions
+- Tests document behavior better than comments
+- Tests verify the fix actually works
+
+### 5. Consistency Checklist
 
 Before committing any changes:
 
@@ -110,6 +149,7 @@ Before committing any changes:
 - [ ] Agents don't call other agents
 - [ ] Functions have docstrings
 - [ ] Follows existing patterns
+- [ ] Bug fixes have unit tests
 
 ---
 

@@ -101,9 +101,7 @@ class CuratorAgent:
         # If you're interested in 5 topics and paper matches 2, score = 0.4
         score = matches / len(user_interests) if user_interests else 0.0
 
-        logger.debug(
-            f"Paper {paper.arxiv_id}: {matches} matches, score={score:.2f}"
-        )
+        logger.debug(f"Paper {paper.arxiv_id}: {matches} matches, score={score:.2f}")
 
         return score
 
@@ -152,9 +150,7 @@ class CuratorAgent:
         if scored_papers:
             logger.info("Top 3 papers:")
             for i, p in enumerate(scored_papers[:3], 1):
-                logger.info(
-                    f"  {i}. [{p.relevance_score:.2f}] {p.title[:50]}..."
-                )
+                logger.info(f"  {i}. [{p.relevance_score:.2f}] {p.title[:50]}...")
 
         return scored_papers
 
@@ -227,9 +223,7 @@ class CuratorAgent:
         return scored_papers
 
     def select_top_papers(
-        self,
-        papers: List[Paper],
-        n: Optional[int] = None
+        self, papers: List[Paper], n: Optional[int] = None
     ) -> List[Paper]:
         """
         Select top N papers by relevance.
@@ -263,7 +257,10 @@ class CuratorAgent:
 # Standalone function for LangGraph integration
 # ============================================================================
 
-def curate_papers_batch(papers: List[Paper], top_n: Optional[int] = None) -> List[Paper]:
+
+def curate_papers_batch(
+    papers: List[Paper], top_n: Optional[int] = None
+) -> List[Paper]:
     """
     Score and select top papers.
 

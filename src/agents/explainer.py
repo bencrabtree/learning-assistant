@@ -207,13 +207,19 @@ IMPORTANT:
                 logger.warning(f"Missing fields in explanation: {missing_fields}")
                 # Fill in missing fields with defaults
                 for field in missing_fields:
-                    if field in ["learning_questions", "prerequisites", "related_concepts"]:
+                    if field in [
+                        "learning_questions",
+                        "prerequisites",
+                        "related_concepts",
+                    ]:
                         explanation[field] = []
                     else:
                         explanation[field] = "Not available"
 
             logger.info(f"✅ Explanation complete for {paper.arxiv_id}")
-            logger.debug(f"Generated {len(explanation['learning_questions'])} learning questions")
+            logger.debug(
+                f"Generated {len(explanation['learning_questions'])} learning questions"
+            )
 
             return explanation
 
@@ -255,10 +261,12 @@ IMPORTANT:
 
             try:
                 explanation = self.explain_paper(paper)
-                results.append({
-                    "arxiv_id": paper.arxiv_id,
-                    "explanation": explanation,
-                })
+                results.append(
+                    {
+                        "arxiv_id": paper.arxiv_id,
+                        "explanation": explanation,
+                    }
+                )
             except Exception as e:
                 logger.error(f"Failed to explain {paper.arxiv_id}: {e}")
                 failed += 1
@@ -370,6 +378,7 @@ IMPORTANT:
 # Standalone function for LangGraph integration
 # ============================================================================
 
+
 def explain_papers_batch(papers: List[Paper]) -> List[Paper]:
     """
     Batch explain papers and return updated Paper objects.
@@ -406,10 +415,11 @@ if __name__ == "__main__":
 
     with get_db_session() as db:
         # Get a paper that has been analyzed but not explained
-        paper = db.query(Paper).filter(
-            Paper.analyzed_at.isnot(None),
-            Paper.explained_at.is_(None)
-        ).first()
+        paper = (
+            db.query(Paper)
+            .filter(Paper.analyzed_at.isnot(None), Paper.explained_at.is_(None))
+            .first()
+        )
 
         if not paper:
             print("No analyzed papers found. First run:")
@@ -429,15 +439,15 @@ if __name__ == "__main__":
             print(f"\n💡 Key Insight:\n{explanation['key_insight']}")
 
             print(f"\n❓ Learning Questions:")
-            for i, q in enumerate(explanation['learning_questions'], 1):
+            for i, q in enumerate(explanation["learning_questions"], 1):
                 print(f"  {i}. {q}")
 
             print(f"\n📖 Prerequisites:")
-            for i, prereq in enumerate(explanation['prerequisites'], 1):
+            for i, prereq in enumerate(explanation["prerequisites"], 1):
                 print(f"  {i}. {prereq}")
 
             print(f"\n🔗 Related Concepts:")
-            for i, concept in enumerate(explanation['related_concepts'], 1):
+            for i, concept in enumerate(explanation["related_concepts"], 1):
                 print(f"  {i}. {concept}")
 
             print("=" * 80)

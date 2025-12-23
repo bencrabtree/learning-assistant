@@ -48,7 +48,11 @@ from src.models.paper import Base
 engine = create_engine(
     settings.database_url,
     # SQLite-specific settings for better performance
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
+    connect_args=(
+        {"check_same_thread": False}
+        if settings.database_url.startswith("sqlite")
+        else {}
+    ),
     # Log all SQL queries (useful for debugging, disable in production)
     echo=settings.log_level == "DEBUG",
     # Connection pool settings
@@ -95,6 +99,7 @@ SessionLocal = sessionmaker(
 # ============================================================================
 # Database Initialization
 # ============================================================================
+
 
 def init_db() -> None:
     """
@@ -159,6 +164,7 @@ def drop_all_tables() -> None:
 # ============================================================================
 # Session Management - Get database sessions
 # ============================================================================
+
 
 @contextmanager
 def get_db_session() -> Generator[Session, None, None]:
@@ -266,6 +272,7 @@ def get_db() -> Session:
 # Helper Functions
 # ============================================================================
 
+
 def check_database_connection() -> bool:
     """
     Check if we can connect to the database.
@@ -306,15 +313,21 @@ def get_database_stats() -> dict:
 
     try:
         with get_db_session() as db:
-            stats['papers'] = db.query(Paper).count()
-            stats['citations'] = db.query(Citation).count()
-            stats['social_signals'] = db.query(SocialSignal).count()
-            stats['reading_progress'] = db.query(ReadingProgress).count()
+            stats["papers"] = db.query(Paper).count()
+            stats["citations"] = db.query(Citation).count()
+            stats["social_signals"] = db.query(SocialSignal).count()
+            stats["reading_progress"] = db.query(ReadingProgress).count()
 
             # Additional useful stats
-            stats['analyzed_papers'] = db.query(Paper).filter(Paper.analyzed_at.isnot(None)).count()
-            stats['explained_papers'] = db.query(Paper).filter(Paper.explained_at.isnot(None)).count()
-            stats['scored_papers'] = db.query(Paper).filter(Paper.scored_at.isnot(None)).count()
+            stats["analyzed_papers"] = (
+                db.query(Paper).filter(Paper.analyzed_at.isnot(None)).count()
+            )
+            stats["explained_papers"] = (
+                db.query(Paper).filter(Paper.explained_at.isnot(None)).count()
+            )
+            stats["scored_papers"] = (
+                db.query(Paper).filter(Paper.scored_at.isnot(None)).count()
+            )
 
         logger.info(f"Database stats: {stats}")
         return stats

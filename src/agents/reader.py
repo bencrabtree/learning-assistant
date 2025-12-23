@@ -221,10 +221,12 @@ IMPORTANT:
 
             try:
                 analysis = self.analyze_paper(paper)
-                results.append({
-                    "arxiv_id": paper.arxiv_id,
-                    "analysis": analysis,
-                })
+                results.append(
+                    {
+                        "arxiv_id": paper.arxiv_id,
+                        "analysis": analysis,
+                    }
+                )
             except Exception as e:
                 logger.error(f"Failed to analyze {paper.arxiv_id}: {e}")
                 failed += 1
@@ -321,6 +323,7 @@ IMPORTANT:
 # Standalone function for LangGraph integration
 # ============================================================================
 
+
 def analyze_papers_batch(papers: List[Paper]) -> List[Paper]:
     """
     Batch analyze papers and return updated Paper objects.
@@ -384,7 +387,7 @@ if __name__ == "__main__":
             print(f"\nMain Claim:\n{analysis['main_claim']}")
             print(f"\nMethodology:\n{analysis['methodology']}")
             print(f"\nKey Results:")
-            for i, result in enumerate(analysis['key_results'], 1):
+            for i, result in enumerate(analysis["key_results"], 1):
                 print(f"  {i}. {result}")
             print(f"\nNovel Contributions:\n{analysis['novel_contributions']}")
             print(f"\nLimitations:\n{analysis['limitations']}")

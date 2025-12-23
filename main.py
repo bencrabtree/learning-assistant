@@ -39,6 +39,7 @@ from src.graph import (
 # Logging Setup
 # ============================================================================
 
+
 def setup_logging():
     """
     Configure logging for the application.
@@ -81,6 +82,7 @@ def setup_logging():
 # ============================================================================
 # Command Handlers
 # ============================================================================
+
 
 def handle_init_db(args):
     """
@@ -133,8 +135,7 @@ def handle_discover(args):
             logger.info("Running full pipeline with LangGraph...")
 
             result = run_full_pipeline(
-                days_back=args.days,
-                max_papers=getattr(args, 'max_papers', None)
+                days_back=args.days, max_papers=getattr(args, "max_papers", None)
             )
 
             # Show results
@@ -156,7 +157,7 @@ def handle_discover(args):
 
             # Show results
             stats = result.get("stats", {})
-            count = stats.get('discovered_count', 0)
+            count = stats.get("discovered_count", 0)
             logger.info(f"✅ Discovered {count} papers")
             logger.info("Use --analyze flag to run full analysis pipeline")
 
@@ -205,7 +206,7 @@ def handle_analyze(args):
             logger.warning(f"Errors encountered: {result['errors']}")
 
         # Helpful message if no papers found
-        if stats.get('discovered_count', 0) == 0:
+        if stats.get("discovered_count", 0) == 0:
             logger.info("No unanalyzed papers found")
             logger.info("Run: python main.py --discover --days 1")
 
@@ -269,6 +270,7 @@ def handle_stats(args):
 # Utilities
 # ============================================================================
 
+
 def confirm_action(message: str) -> bool:
     """
     Ask user for confirmation.
@@ -284,12 +286,13 @@ def confirm_action(message: str) -> bool:
             drop_all_tables()
     """
     response = input(f"{message} [y/N]: ").strip().lower()
-    return response in ('y', 'yes')
+    return response in ("y", "yes")
 
 
 # ============================================================================
 # Main CLI
 # ============================================================================
+
 
 def main():
     """
@@ -315,77 +318,55 @@ Examples:
 
   # Reset everything
   python main.py --init-db --reset
-        """
+        """,
     )
 
     # Database commands
     parser.add_argument(
-        "--init-db",
-        action="store_true",
-        help="Initialize database schema"
+        "--init-db", action="store_true", help="Initialize database schema"
     )
 
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Reset database (WARNING: deletes all data)"
+        help="Reset database (WARNING: deletes all data)",
     )
 
     parser.add_argument(
-        "--yes",
-        "-y",
-        action="store_true",
-        help="Skip confirmation prompts"
+        "--yes", "-y", action="store_true", help="Skip confirmation prompts"
     )
 
     # Discovery commands
     parser.add_argument(
-        "--discover",
-        action="store_true",
-        help="Discover new papers from arXiv"
+        "--discover", action="store_true", help="Discover new papers from arXiv"
     )
 
     parser.add_argument(
-        "--days",
-        type=int,
-        default=1,
-        help="How many days back to search (default: 1)"
+        "--days", type=int, default=1, help="How many days back to search (default: 1)"
     )
 
     parser.add_argument(
         "--max-papers",
         type=int,
         default=None,
-        help="Maximum number of papers to process (for testing)"
+        help="Maximum number of papers to process (for testing)",
     )
 
     # Analysis commands
     parser.add_argument(
-        "--analyze",
-        action="store_true",
-        help="Analyze papers with Claude"
+        "--analyze", action="store_true", help="Analyze papers with Claude"
     )
 
     # Digest commands
     parser.add_argument(
-        "--digest",
-        action="store_true",
-        help="Generate and send email digest"
+        "--digest", action="store_true", help="Generate and send email digest"
     )
 
     # Stats commands
-    parser.add_argument(
-        "--stats",
-        action="store_true",
-        help="Show database statistics"
-    )
+    parser.add_argument("--stats", action="store_true", help="Show database statistics")
 
     # Logging
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging"
-    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     # Parse arguments
     args = parser.parse_args()

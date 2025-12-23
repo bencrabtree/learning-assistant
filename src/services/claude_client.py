@@ -59,7 +59,7 @@ class ClaudeClient:
         system: Optional[str] = None,
         max_tokens: int = 4096,
         temperature: float = 1.0,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Send a prompt to Claude and get a text response.
@@ -99,7 +99,7 @@ class ClaudeClient:
                 temperature=temperature,
                 system=system if system else None,
                 messages=messages,
-                **kwargs
+                **kwargs,
             )
 
             # Extract the text from the response
@@ -233,10 +233,7 @@ ONLY JSON."""
             raise
 
     def estimate_cost(
-        self,
-        input_tokens: int,
-        output_tokens: int,
-        model: Optional[str] = None
+        self, input_tokens: int, output_tokens: int, model: Optional[str] = None
     ) -> float:
         """
         Estimate the cost of an API call.

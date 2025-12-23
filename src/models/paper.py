@@ -25,6 +25,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 # Base class for all models
 # ============================================================================
 
+
 class Base(DeclarativeBase):
     """
     Base class for all database models.
@@ -32,12 +33,14 @@ class Base(DeclarativeBase):
     SQLAlchemy will use this to set up the database mapping.
     All our models will inherit from this.
     """
+
     pass
 
 
 # ============================================================================
 # Paper Model - The core entity
 # ============================================================================
+
 
 class Paper(Base):
     """
@@ -85,9 +88,7 @@ class Paper(Base):
 
     # Tracking: when and how we discovered this paper
     discovered_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False
+        DateTime, default=datetime.utcnow, nullable=False
     )
 
     # Which source found it: "arxiv", "twitter", "hackernews", etc.
@@ -173,20 +174,18 @@ class Paper(Base):
     citations: Mapped[List["Citation"]] = relationship(
         "Citation",
         back_populates="paper",
-        cascade="all, delete-orphan"  # If we delete a paper, delete its citations too
+        cascade="all, delete-orphan",  # If we delete a paper, delete its citations too
     )
 
     social_signals: Mapped[List["SocialSignal"]] = relationship(
-        "SocialSignal",
-        back_populates="paper",
-        cascade="all, delete-orphan"
+        "SocialSignal", back_populates="paper", cascade="all, delete-orphan"
     )
 
     reading_progress: Mapped[Optional["ReadingProgress"]] = relationship(
         "ReadingProgress",
         back_populates="paper",
         uselist=False,  # One-to-one relationship
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
@@ -204,6 +203,7 @@ Index("idx_discovered_at", Paper.discovered_at)
 # ============================================================================
 # Citation Model - Track citation counts over time
 # ============================================================================
+
 
 class Citation(Base):
     """
@@ -226,8 +226,10 @@ class Citation(Base):
     # This links each citation record to a specific paper
     paper_id: Mapped[str] = mapped_column(
         String(20),
-        ForeignKey("papers.arxiv_id", ondelete="CASCADE"),  # If paper is deleted, delete citations too
-        nullable=False
+        ForeignKey(
+            "papers.arxiv_id", ondelete="CASCADE"
+        ),  # If paper is deleted, delete citations too
+        nullable=False,
     )
 
     # Citation metrics
@@ -235,9 +237,7 @@ class Citation(Base):
 
     # When we measured this count
     measured_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False
+        DateTime, default=datetime.utcnow, nullable=False
     )
 
     # Derived metrics (calculated from historical data)
@@ -246,9 +246,7 @@ class Citation(Base):
 
     # Where we got this data from
     source: Mapped[str] = mapped_column(
-        String(50),
-        default="semantic_scholar",
-        nullable=False
+        String(50), default="semantic_scholar", nullable=False
     )
 
     # Relationship back to the paper
@@ -265,6 +263,7 @@ Index("idx_citation_paper_measured", Citation.paper_id, Citation.measured_at)
 # ============================================================================
 # SocialSignal Model - Twitter, HN, Reddit mentions
 # ============================================================================
+
 
 class SocialSignal(Base):
     """
@@ -285,9 +284,7 @@ class SocialSignal(Base):
 
     # Link to the paper
     paper_id: Mapped[str] = mapped_column(
-        String(20),
-        ForeignKey("papers.arxiv_id", ondelete="CASCADE"),
-        nullable=False
+        String(20), ForeignKey("papers.arxiv_id", ondelete="CASCADE"), nullable=False
     )
 
     # Where the signal came from
@@ -312,9 +309,7 @@ class SocialSignal(Base):
 
     # When we discovered it
     discovered_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False
+        DateTime, default=datetime.utcnow, nullable=False
     )
 
     # Relationship back to the paper
@@ -332,6 +327,7 @@ Index("idx_social_paper_source", SocialSignal.paper_id, SocialSignal.source)
 # ReadingProgress Model - Track user's reading journey
 # ============================================================================
 
+
 class ReadingProgress(Base):
     """
     Tracks which papers the user has read and their notes.
@@ -347,18 +343,12 @@ class ReadingProgress(Base):
 
     # Paper is the primary key (one progress record per paper)
     paper_id: Mapped[str] = mapped_column(
-        String(20),
-        ForeignKey("papers.arxiv_id", ondelete="CASCADE"),
-        primary_key=True
+        String(20), ForeignKey("papers.arxiv_id", ondelete="CASCADE"), primary_key=True
     )
 
     # Reading status
     # Values: "unread", "reading", "finished", "archived"
-    status: Mapped[str] = mapped_column(
-        String(20),
-        default="unread",
-        nullable=False
-    )
+    status: Mapped[str] = mapped_column(String(20), default="unread", nullable=False)
 
     # Timestamps
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
