@@ -147,7 +147,7 @@ class DiscoveryAgent:
                 paper_data = {
                     "arxiv_id": result.entry_id.split("/")[-1],  # Extract ID from URL
                     "title": result.title.strip(),
-                    "abstract": result.summary.strip(),  # arxiv library uses 'summary' not 'abstract'
+                    "abstract": result.summary.strip(),
                     "authors": [author.name for author in result.authors],
                     "published_date": result.published,
                     "categories": result.categories,
