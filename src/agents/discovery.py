@@ -22,7 +22,7 @@ Example:
     # Returns papers from the last 24 hours
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import arxiv
 from loguru import logger
@@ -112,7 +112,8 @@ class DiscoveryAgent:
 
         # Calculate date cutoff
         # We only want papers published after this date
-        cutoff_date = datetime.now() - timedelta(days=days_back)
+        # Use timezone-aware datetime (UTC) to match arXiv API results
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
         logger.debug(f"Cutoff date: {cutoff_date}")
 
         # Build query
@@ -146,7 +147,7 @@ class DiscoveryAgent:
                 paper_data = {
                     "arxiv_id": result.entry_id.split("/")[-1],  # Extract ID from URL
                     "title": result.title.strip(),
-                    "abstract": result.abstract.strip(),
+                    "abstract": result.summary.strip(),  # arxiv library uses 'summary' not 'abstract'
                     "authors": [author.name for author in result.authors],
                     "published_date": result.published,
                     "categories": result.categories,
