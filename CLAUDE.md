@@ -8,6 +8,111 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 
 ---
 
+## ⚠️ CRITICAL ARCHITECTURE PRINCIPLES
+
+**READ THIS FIRST** - These principles are non-negotiable for consistency and maintainability.
+
+### 1. Single Execution Path Through LangGraph
+
+**All orchestration MUST go through the graph workflow.**
+
+✅ **CORRECT:**
+```python
+# main.py (CLI layer)
+from src.graph import run_discovery_pipeline
+
+def handle_discover(args):
+    result = run_discovery_pipeline(days_back=args.days)
+```
+
+❌ **WRONG:**
+```python
+# main.py (CLI layer)
+from src.agents.reader import ReaderAgent
+
+def handle_discover(args):
+    # Don't call agents directly from main.py!
+    reader = ReaderAgent()
+    reader.analyze_and_save(papers)
+```
+
+**Why:** LangGraph is our orchestration layer. Bypassing it defeats the purpose and creates inconsistent execution paths.
+
+### 2. All Imports at Top of File
+
+**No lazy imports inside functions** (except for rare circular dependency issues).
+
+✅ **CORRECT:**
+```python
+# At top of file
+from src.models.paper import Paper
+from src.agents.reader import ReaderAgent
+from src.graph import run_discovery_pipeline
+
+def my_function():
+    reader = ReaderAgent()
+```
+
+❌ **WRONG:**
+```python
+def my_function():
+    # Don't import inside functions!
+    from src.agents.reader import ReaderAgent
+    reader = ReaderAgent()
+```
+
+**Why:**
+- Makes dependencies obvious at a glance
+- Fails fast at startup if imports are broken
+- Standard Python practice
+- Reduces confusion and redundancy
+
+### 3. Layer Separation
+
+**Each layer has specific responsibilities. Don't mix them.**
+
+| Layer | Responsibility | Examples |
+|-------|---------------|----------|
+| **Agents** | Business logic, one task | `ReaderAgent.analyze_paper()` |
+| **Graph** | Orchestration, workflow | `run_discovery_pipeline()` |
+| **CLI** | User interface, parsing | `handle_discover()` |
+| **Database** | Data persistence | `get_db_session()` |
+| **Services** | External APIs | `ClaudeClient.chat()` |
+
+✅ **CORRECT:**
+```python
+# graph.py - Orchestrates workflow
+def run_discovery_pipeline():
+    workflow = create_workflow()
+    return workflow.invoke(initial_state)
+
+# main.py - Just calls the graph
+def handle_discover(args):
+    result = run_discovery_pipeline(days_back=args.days)
+```
+
+❌ **WRONG:**
+```python
+# main.py - Doing orchestration (graph's job!)
+def handle_discover(args):
+    reader = ReaderAgent()
+    explainer = ExplainerAgent()
+    # This belongs in graph.py!
+```
+
+### 4. Consistency Checklist
+
+Before committing any changes:
+
+- [ ] All imports at top of file
+- [ ] All orchestration in `src/graph.py`
+- [ ] `main.py` only calls graph workflows
+- [ ] Agents don't call other agents
+- [ ] Functions have docstrings
+- [ ] Follows existing patterns
+
+---
+
 ## Table of Contents
 
 1. [Project Overview](#project-overview)

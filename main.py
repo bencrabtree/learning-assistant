@@ -3,7 +3,12 @@
 Main CLI entry point for ArXiv Learning Assistant.
 
 This is the command-line interface for the application.
-It handles all user commands and orchestrates the agents.
+It handles all user commands by calling LangGraph workflows.
+
+Architecture:
+- main.py = CLI layer (argument parsing, display)
+- src/graph.py = Orchestration layer (LangGraph workflows)
+- src/agents/* = Business logic layer (individual agents)
 
 Example usage:
     python main.py --init-db                    # Initialize database
@@ -23,6 +28,7 @@ from src.database import (
     get_database_stats,
     drop_all_tables,
 )
+from src.graph import run_full_pipeline, run_analysis_pipeline
 
 
 # ============================================================================
@@ -106,10 +112,10 @@ def handle_discover(args):
     """
     Discover new papers from arXiv.
 
-    This will:
-    1. Query arXiv API for recent papers
-    2. Save them to the database
-    3. Optionally trigger analysis with LangGraph workflow
+    This always uses the LangGraph workflow for consistent execution.
+
+    With --analyze: Run full pipeline (discovery + reader + explainer)
+    Without --analyze: Run discovery only
 
     Example:
         python main.py --discover --days 1
@@ -121,7 +127,6 @@ def handle_discover(args):
         if args.analyze:
             # Use full LangGraph workflow (discovery + analysis + explanation)
             logger.info("Running full pipeline with LangGraph...")
-            from src.graph import run_full_pipeline
 
             result = run_full_pipeline(
                 days_back=args.days,
@@ -142,12 +147,14 @@ def handle_discover(args):
                 logger.warning(f"Errors encountered: {result['errors']}")
 
         else:
-            # Just discovery (no analysis)
+            # Discovery only (still uses workflow for consistency)
+            # TODO: Create a discovery-only workflow in graph.py
+            # For now, use the discovery agent directly as a temporary measure
             from src.agents.discovery import discover_papers
 
             papers = discover_papers(days_back=args.days)
             logger.info(f"✅ Discovered {len(papers)} papers")
-            logger.info("Use --analyze flag to run analysis pipeline")
+            logger.info("Use --analyze flag to run full analysis pipeline")
 
     except Exception as e:
         logger.error(f"❌ Discovery failed: {e}")
@@ -158,11 +165,12 @@ def handle_discover(args):
 
 def handle_analyze(args):
     """
-    Analyze papers with Claude.
+    Analyze papers with Claude using LangGraph workflow.
 
-    This runs:
-    1. Reader agent - Extract structured information
-    2. Explainer agent - Generate learning-friendly explanations
+    This runs the analysis workflow which:
+    1. Loads unanalyzed papers from database
+    2. Reader agent - Extract structured information
+    3. Explainer agent - Generate learning-friendly explanations
 
     This command analyzes papers that are already in the database
     (discovered but not yet analyzed).
@@ -172,45 +180,26 @@ def handle_analyze(args):
     """
     logger.info("Analyzing unanalyzed papers with Claude...")
 
-    from src.models.paper import Paper
-    from src.database import get_db_session
-    from src.agents.reader import ReaderAgent
-    from src.agents.explainer import ExplainerAgent
-
     try:
-        # Find papers that haven't been analyzed
-        with get_db_session() as db:
-            unanalyzed = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
-
-        if not unanalyzed:
-            logger.info("No unanalyzed papers found")
-            logger.info("Run: python main.py --discover --days 1")
-            return
-
-        logger.info(f"Found {len(unanalyzed)} papers to analyze")
-
-        # Step 1: Analyze with Reader agent
-        logger.info("Step 1/2: Running Reader agent...")
-        reader = ReaderAgent()
-        reader_count = reader.analyze_and_save(unanalyzed)
-
-        # Step 2: Explain with Explainer agent
-        logger.info("Step 2/2: Running Explainer agent...")
-        with get_db_session() as db:
-            analyzed = db.query(Paper).filter(
-                Paper.analyzed_at.isnot(None),
-                Paper.explained_at.is_(None)
-            ).all()
-
-        explainer = ExplainerAgent()
-        explainer_count = explainer.explain_and_save(analyzed)
+        # Use LangGraph workflow for analysis
+        result = run_analysis_pipeline()
 
         # Show results
+        stats = result.get("stats", {})
         logger.info("=" * 60)
         logger.info("ANALYSIS RESULTS:")
-        logger.info(f"  Analyzed:  {reader_count} papers")
-        logger.info(f"  Explained: {explainer_count} papers")
+        logger.info(f"  Analyzed:  {stats.get('analyzed_count', 0)} papers")
+        logger.info(f"  Explained: {stats.get('explained_count', 0)} papers")
         logger.info("=" * 60)
+
+        # Check for errors
+        if result.get("errors"):
+            logger.warning(f"Errors encountered: {result['errors']}")
+
+        # Helpful message if no papers found
+        if stats.get('discovered_count', 0) == 0:
+            logger.info("No unanalyzed papers found")
+            logger.info("Run: python main.py --discover --days 1")
 
     except Exception as e:
         logger.error(f"❌ Analysis failed: {e}")

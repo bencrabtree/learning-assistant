@@ -40,6 +40,7 @@ from langgraph.graph import StateGraph, END
 from loguru import logger
 
 from src.models.paper import Paper
+from src.database import get_db_session
 from src.agents.discovery import discover_papers
 from src.agents.reader import analyze_papers_batch
 from src.agents.explainer import explain_papers_batch
@@ -435,6 +436,91 @@ def run_full_pipeline(
 
     except Exception as e:
         logger.error(f"❌ Pipeline failed: {e}")
+        raise
+
+
+def run_analysis_pipeline() -> AgentState:
+    """
+    Run analysis pipeline on existing papers in database.
+
+    This workflow:
+    1. Loads papers from database that haven't been analyzed
+    2. Runs Reader agent
+    3. Runs Explainer agent
+    4. Returns results
+
+    Use this when you want to analyze papers that are already discovered
+    but haven't been processed yet.
+
+    Returns:
+        Final state with analyzed and explained papers
+
+    Example:
+        result = run_analysis_pipeline()
+        count = result["stats"]["analyzed_count"]
+        print(f"Analyzed {count} papers")
+    """
+    logger.info("🚀 Starting analysis pipeline...")
+
+    # Load unanalyzed papers from database
+    with get_db_session() as db:
+        unanalyzed = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
+
+    if not unanalyzed:
+        logger.info("No unanalyzed papers found")
+        return {
+            "discovered_papers": [],
+            "analyzed_papers": [],
+            "explained_papers": [],
+            "final_papers": [],
+            "errors": [],
+            "stats": {
+                "discovered_count": 0,
+                "analyzed_count": 0,
+                "explained_count": 0,
+            },
+        }
+
+    logger.info(f"Found {len(unanalyzed)} unanalyzed papers")
+
+    # Create a simplified workflow (skip discovery)
+    workflow = StateGraph(AgentState)
+    workflow.add_node("reader", reader_node)
+    workflow.add_node("explainer", explainer_node)
+
+    workflow.set_entry_point("reader")
+    workflow.add_edge("reader", "explainer")
+    workflow.add_edge("explainer", END)
+
+    app = workflow.compile()
+
+    # Set up initial state with existing papers
+    initial_state: AgentState = {
+        "days_back": None,
+        "categories": None,
+        "max_papers": None,
+        "discovered_papers": unanalyzed,  # Use existing papers
+        "analyzed_papers": None,
+        "explained_papers": None,
+        "final_papers": None,
+        "errors": [],
+        "stats": {"discovered_count": len(unanalyzed)},
+    }
+
+    # Execute workflow
+    try:
+        final_state = app.invoke(initial_state)
+
+        logger.info("✅ Analysis pipeline complete!")
+        logger.info(f"Stats: {final_state.get('stats', {})}")
+
+        if final_state.get("errors"):
+            logger.warning(f"Errors encountered: {final_state['errors']}")
+
+        return final_state
+
+    except Exception as e:
+        logger.error(f"❌ Analysis pipeline failed: {e}")
         raise
 
 
