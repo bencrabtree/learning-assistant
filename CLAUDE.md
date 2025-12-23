@@ -15,13 +15,14 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 3. [Tech Stack](#tech-stack)
 4. [Development Workflow](#development-workflow)
 5. [Architecture & Design](#architecture--design)
-6. [Database Schema](#database-schema)
-7. [Code Conventions](#code-conventions)
-8. [Key Patterns](#key-patterns)
-9. [Common Tasks](#common-tasks)
-10. [Testing & Debugging](#testing--debugging)
-11. [API Integration](#api-integration)
-12. [Important Notes](#important-notes)
+6. [Learning Objectives & Advanced Patterns](#learning-objectives--advanced-patterns)
+7. [Database Schema](#database-schema)
+8. [Code Conventions](#code-conventions)
+9. [Key Patterns](#key-patterns)
+10. [Common Tasks](#common-tasks)
+11. [Testing & Debugging](#testing--debugging)
+12. [API Integration](#api-integration)
+13. [Important Notes](#important-notes)
 
 ---
 
@@ -312,6 +313,694 @@ AgentState = {
 - **Purpose:** Score and rank papers by relevance
 - **Scoring:** Interest match (40%), Social proof (25%), Citation velocity (20%), Recency (10%), Lab prestige (5%)
 - **Output:** Top N papers ranked by total score
+
+---
+
+## Learning Objectives & Advanced Patterns
+
+**This is a learning project!** The primary goal is to understand LangGraph and multi-agent systems, specifically focusing on:
+
+1. **Shared Context Management** - How agents communicate through state
+2. **Evolution Over Time** - How state changes as it flows through agents
+3. **Auditability** - How to track, debug, and replay agent decisions
+
+This section covers advanced LangGraph patterns essential for production multi-agent systems.
+
+---
+
+### 1. Shared Context Management
+
+#### What is Shared Context?
+
+In LangGraph, **state** is the shared context that all agents can read from and write to. Think of it as a living document that evolves as it passes through the graph.
+
+**Example: Paper Processing State**
+
+```python
+from typing import TypedDict, List, Annotated
+from langgraph.graph import add_messages
+
+class PaperProcessingState(TypedDict):
+    """
+    Shared state for the paper processing workflow.
+
+    Each agent reads what it needs and writes its results.
+    State flows: Discovery → Reader → Explainer → Curator
+    """
+    # Input configuration
+    research_interests: List[str]
+    date_range: tuple[datetime, datetime]
+
+    # Discovery agent writes these
+    raw_papers: List[dict]
+    discovery_errors: List[str]
+
+    # Reader agent writes these
+    analyzed_papers: List[dict]
+    analysis_errors: List[str]
+
+    # Explainer agent writes these
+    explained_papers: List[dict]
+    explanation_errors: List[str]
+
+    # Curator agent writes these
+    scored_papers: List[dict]
+    final_selection: List[dict]
+
+    # Metadata for tracking
+    total_api_calls: int
+    total_cost_usd: float
+    processing_time_seconds: float
+```
+
+#### State Reducers: Managing Concurrent Updates
+
+When multiple agents run in parallel, they might update the same state field. **Reducers** define how to merge these updates.
+
+```python
+from typing import Annotated
+from operator import add
+from langgraph.graph import StateGraph
+
+class ParallelDiscoveryState(TypedDict):
+    """
+    State with reducers for parallel discovery agents.
+
+    Multiple discovery sources (arXiv, Twitter, HN) run in parallel.
+    We need to combine their results without losing data.
+    """
+    # Simple replacement (last write wins)
+    query: str
+
+    # Add reducer: concatenate lists from parallel agents
+    raw_papers: Annotated[List[dict], add]
+
+    # Custom reducer: merge error lists and deduplicate
+    errors: Annotated[List[str], lambda old, new: list(set(old + new))]
+
+    # Custom reducer: sum API call counts
+    api_calls: Annotated[int, lambda old, new: old + new]
+
+# Usage example
+def arxiv_discovery(state: ParallelDiscoveryState) -> ParallelDiscoveryState:
+    """ArXiv discovery agent."""
+    papers = fetch_from_arxiv(state["query"])
+    return {
+        "raw_papers": papers,  # Will be ADDED to existing papers
+        "api_calls": 1,        # Will be SUMMED with other calls
+    }
+
+def twitter_discovery(state: ParallelDiscoveryState) -> ParallelDiscoveryState:
+    """Twitter discovery agent."""
+    papers = fetch_from_twitter(state["query"])
+    return {
+        "raw_papers": papers,  # Will be ADDED to existing papers
+        "api_calls": 5,        # Will be SUMMED with other calls
+    }
+
+# After both agents run in parallel:
+# state["raw_papers"] = arxiv_papers + twitter_papers
+# state["api_calls"] = 1 + 5 = 6
+```
+
+#### Message History Pattern
+
+For conversational agents or iterative refinement, use the message history pattern:
+
+```python
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langgraph.graph import add_messages
+
+class ConversationalState(TypedDict):
+    """
+    State that maintains conversation history.
+
+    The add_messages reducer automatically:
+    - Appends new messages to the list
+    - Handles message deduplication by ID
+    - Preserves message order
+    """
+    # Automatically managed message list
+    messages: Annotated[List[BaseMessage], add_messages]
+
+    # Other state fields
+    paper_id: str
+    user_question: str
+
+# Example: Interactive paper Q&A agent
+def paper_qa_agent(state: ConversationalState) -> ConversationalState:
+    """Answer questions about a paper using conversation history."""
+    # Get full conversation context
+    history = state["messages"]
+
+    # Generate response using history
+    response = claude_client.chat(
+        messages=history + [HumanMessage(content=state["user_question"])]
+    )
+
+    return {
+        "messages": [AIMessage(content=response)]  # Added to history
+    }
+```
+
+---
+
+### 2. Evolution Over Time: Checkpointing & Persistence
+
+#### Why Checkpointing?
+
+Checkpointing lets you:
+- **Resume** interrupted workflows
+- **Replay** workflows for debugging
+- **Audit** what happened at each step
+- **Time-travel** debug by inspecting state at any point
+
+#### Implementing Checkpointing
+
+```python
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import StateGraph, END
+
+# Create a checkpointer (persists to SQLite)
+checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+
+# Build your graph
+graph = StateGraph(PaperProcessingState)
+graph.add_node("discovery", discovery_agent)
+graph.add_node("reader", reader_agent)
+graph.add_node("explainer", explainer_agent)
+graph.add_edge("discovery", "reader")
+graph.add_edge("reader", "explainer")
+graph.add_edge("explainer", END)
+
+# Compile with checkpointing enabled
+app = graph.compile(checkpointer=checkpointer)
+
+# Run with a thread_id to enable persistence
+config = {"configurable": {"thread_id": "paper-run-2024-01-15"}}
+result = app.invoke(initial_state, config=config)
+
+# Resume from checkpoint later (e.g., after a crash)
+resumed_result = app.invoke(None, config=config)  # Continues from last checkpoint
+
+# Get state at any point
+checkpoint = checkpointer.get(config)
+print(f"State at checkpoint: {checkpoint.values}")
+```
+
+#### Checkpoint Strategy for This Project
+
+```python
+# src/graph.py
+
+def create_paper_processing_graph(enable_checkpointing=True):
+    """
+    Create the main paper processing graph with optional checkpointing.
+
+    Checkpointing is useful for:
+    - Long-running batch jobs (process 1000 papers)
+    - Debugging (inspect state at each agent)
+    - Cost tracking (resume without re-running expensive API calls)
+    """
+    graph = StateGraph(PaperProcessingState)
+
+    # Add all agents
+    graph.add_node("discovery", discovery_agent)
+    graph.add_node("reader", reader_agent)
+    graph.add_node("explainer", explainer_agent)
+    graph.add_node("curator", curator_agent)
+
+    # Define flow
+    graph.add_edge("discovery", "reader")
+    graph.add_edge("reader", "explainer")
+    graph.add_edge("explainer", "curator")
+    graph.add_edge("curator", END)
+
+    # Compile with checkpointing
+    if enable_checkpointing:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        checkpointer = SqliteSaver.from_conn_string("data/checkpoints.db")
+        return graph.compile(checkpointer=checkpointer)
+    else:
+        return graph.compile()
+
+# Usage: Resume after interruption
+def process_papers_with_resume(days_back=1):
+    """Process papers with automatic resume capability."""
+    from datetime import datetime
+
+    app = create_paper_processing_graph(enable_checkpointing=True)
+
+    # Use date-based thread_id for idempotency
+    thread_id = f"discovery-{datetime.now().date()}"
+    config = {"configurable": {"thread_id": thread_id}}
+
+    try:
+        result = app.invoke(
+            {"date_range": (datetime.now() - timedelta(days=days_back), datetime.now())},
+            config=config
+        )
+        return result
+    except KeyboardInterrupt:
+        logger.warning("Interrupted! Progress saved. Re-run to continue.")
+        raise
+```
+
+---
+
+### 3. Auditability: Decision Logging & Replay
+
+#### Decision Logging Pattern
+
+Track **why** agents made decisions, not just **what** they did:
+
+```python
+from datetime import datetime
+from typing import List, Dict
+import json
+
+class AuditLog(TypedDict):
+    """Audit log entry for agent decisions."""
+    timestamp: datetime
+    agent_name: str
+    decision: str
+    reasoning: str
+    input_snapshot: Dict
+    output_snapshot: Dict
+    metadata: Dict
+
+class AuditableState(PaperProcessingState):
+    """State with audit trail."""
+    audit_log: Annotated[List[AuditLog], add]
+
+def curator_agent_with_logging(state: AuditableState) -> AuditableState:
+    """
+    Curator agent that logs its decisions.
+
+    For each paper it selects or rejects, it logs:
+    - What decision was made
+    - Why it was made (scores, thresholds)
+    - Input/output state snapshots
+    """
+    papers = state["explained_papers"]
+
+    # Score papers
+    scored = []
+    audit_entries = []
+
+    for paper in papers:
+        score = calculate_relevance_score(paper, state["research_interests"])
+
+        # Decision: include or exclude?
+        threshold = 0.7
+        included = score >= threshold
+
+        # Log the decision
+        audit_entries.append({
+            "timestamp": datetime.utcnow(),
+            "agent_name": "curator",
+            "decision": "include" if included else "exclude",
+            "reasoning": f"Score {score:.2f} vs threshold {threshold}",
+            "input_snapshot": {
+                "paper_id": paper["arxiv_id"],
+                "paper_title": paper["title"],
+                "score_components": paper.get("score_components", {}),
+            },
+            "output_snapshot": {
+                "final_score": score,
+                "included": included,
+            },
+            "metadata": {
+                "research_interests": state["research_interests"],
+                "threshold": threshold,
+            }
+        })
+
+        if included:
+            scored.append({**paper, "relevance_score": score})
+
+    return {
+        "scored_papers": scored,
+        "final_selection": sorted(scored, key=lambda p: p["relevance_score"], reverse=True)[:5],
+        "audit_log": audit_entries
+    }
+
+# Save audit log to database or file
+def save_audit_log(state: AuditableState, run_id: str):
+    """Persist audit log for later analysis."""
+    with open(f"logs/audit-{run_id}.jsonl", "w") as f:
+        for entry in state["audit_log"]:
+            f.write(json.dumps(entry, default=str) + "\n")
+```
+
+#### Replay & Debugging
+
+```python
+def replay_workflow(checkpoint_db: str, thread_id: str):
+    """
+    Replay a workflow step-by-step for debugging.
+
+    This is invaluable for:
+    - Understanding why certain papers were selected
+    - Debugging scoring algorithms
+    - Optimizing prompts based on historical runs
+    """
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    checkpointer = SqliteSaver.from_conn_string(checkpoint_db)
+
+    # Get all checkpoints for this thread
+    checkpoints = checkpointer.list({"configurable": {"thread_id": thread_id}})
+
+    print(f"Replaying workflow: {thread_id}")
+    print("=" * 60)
+
+    for i, checkpoint in enumerate(checkpoints):
+        print(f"\nStep {i+1}: {checkpoint.metadata.get('step', 'unknown')}")
+        print(f"Timestamp: {checkpoint.metadata.get('timestamp')}")
+
+        state = checkpoint.values
+
+        # Show key metrics at this step
+        print(f"Papers discovered: {len(state.get('raw_papers', []))}")
+        print(f"Papers analyzed: {len(state.get('analyzed_papers', []))}")
+        print(f"Papers explained: {len(state.get('explained_papers', []))}")
+        print(f"Final selection: {len(state.get('final_selection', []))}")
+        print(f"Total cost: ${state.get('total_cost_usd', 0):.2f}")
+        print(f"Errors: {len(state.get('discovery_errors', []) + state.get('analysis_errors', []))}")
+
+# Usage:
+# replay_workflow("data/checkpoints.db", "discovery-2024-01-15")
+```
+
+#### Visualization for Debugging
+
+```python
+def visualize_state_evolution(checkpoint_db: str, thread_id: str):
+    """
+    Visualize how state evolved through the graph.
+
+    Shows:
+    - How many items at each stage
+    - Cost accumulation over time
+    - Error distribution by agent
+    """
+    import matplotlib.pyplot as plt
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    checkpointer = SqliteSaver.from_conn_string(checkpoint_db)
+    checkpoints = list(checkpointer.list({"configurable": {"thread_id": thread_id}}))
+
+    # Extract metrics
+    steps = []
+    papers_count = []
+    costs = []
+
+    for cp in checkpoints:
+        state = cp.values
+        steps.append(cp.metadata.get('step', 'unknown'))
+        papers_count.append(len(state.get('raw_papers', [])))
+        costs.append(state.get('total_cost_usd', 0))
+
+    # Plot
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+    ax1.plot(steps, papers_count, marker='o')
+    ax1.set_title('Papers in Pipeline by Step')
+    ax1.set_ylabel('Paper Count')
+
+    ax2.plot(steps, costs, marker='o', color='red')
+    ax2.set_title('Cumulative API Cost by Step')
+    ax2.set_ylabel('Cost (USD)')
+    ax2.set_xlabel('Pipeline Step')
+
+    plt.tight_layout()
+    plt.savefig(f'logs/state-evolution-{thread_id}.png')
+```
+
+---
+
+### 4. Human-in-the-Loop Patterns
+
+Sometimes you want human approval before proceeding:
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+def create_human_in_loop_graph():
+    """
+    Graph that pauses for human approval before sending emails.
+
+    Flow:
+    1. Discovery → Reader → Explainer → Curator
+    2. PAUSE for human review
+    3. If approved → Send email
+    4. If rejected → Log and exit
+    """
+    graph = StateGraph(PaperProcessingState)
+
+    # Add agents
+    graph.add_node("discovery", discovery_agent)
+    graph.add_node("reader", reader_agent)
+    graph.add_node("explainer", explainer_agent)
+    graph.add_node("curator", curator_agent)
+    graph.add_node("send_email", email_agent)
+
+    # Define flow with conditional edge
+    graph.add_edge("discovery", "reader")
+    graph.add_edge("reader", "explainer")
+    graph.add_edge("explainer", "curator")
+
+    # PAUSE here - human decides next step
+    graph.add_conditional_edges(
+        "curator",
+        human_approval_gate,  # Function that returns "approved" or "rejected"
+        {
+            "approved": "send_email",
+            "rejected": END,
+        }
+    )
+    graph.add_edge("send_email", END)
+
+    # Must use checkpointing for human-in-loop
+    checkpointer = SqliteSaver.from_conn_string("data/checkpoints.db")
+    return graph.compile(checkpointer=checkpointer, interrupt_before=["send_email"])
+
+# Run with interruption
+app = create_human_in_loop_graph()
+config = {"configurable": {"thread_id": "review-2024-01-15"}}
+
+# Initial run - stops before email
+result = app.invoke(initial_state, config=config)
+print("Pipeline paused. Review the papers:")
+for paper in result["final_selection"]:
+    print(f"- {paper['title']}")
+
+# Human reviews and approves
+approval = input("Send email? (y/n): ")
+
+# Continue with approval
+if approval.lower() == 'y':
+    app.update_state(config, {"approved": True})
+    final_result = app.invoke(None, config=config)
+else:
+    print("Email cancelled")
+```
+
+---
+
+### 5. Advanced Graph Patterns
+
+#### Conditional Routing Based on State
+
+```python
+def route_based_on_quality(state: PaperProcessingState) -> str:
+    """
+    Decide next step based on paper quality.
+
+    - High quality (score > 0.9) → Skip review, send immediately
+    - Medium quality (0.7-0.9) → Human review
+    - Low quality (< 0.7) → Discard
+    """
+    avg_score = sum(p["relevance_score"] for p in state["scored_papers"]) / len(state["scored_papers"])
+
+    if avg_score > 0.9:
+        return "auto_send"
+    elif avg_score > 0.7:
+        return "human_review"
+    else:
+        return "discard"
+
+# In graph definition:
+graph.add_conditional_edges(
+    "curator",
+    route_based_on_quality,
+    {
+        "auto_send": "send_email",
+        "human_review": "review_node",
+        "discard": END,
+    }
+)
+```
+
+#### Sub-graphs for Composability
+
+```python
+def create_analysis_subgraph():
+    """
+    Reusable sub-graph for paper analysis.
+
+    Can be used in:
+    - Main discovery pipeline
+    - Ad-hoc paper analysis
+    - Batch re-processing
+    """
+    subgraph = StateGraph(PaperProcessingState)
+    subgraph.add_node("reader", reader_agent)
+    subgraph.add_node("explainer", explainer_agent)
+    subgraph.add_edge("reader", "explainer")
+    subgraph.add_edge("explainer", END)
+    return subgraph.compile()
+
+def create_main_graph():
+    """Main graph that uses the analysis sub-graph."""
+    graph = StateGraph(PaperProcessingState)
+
+    # Regular nodes
+    graph.add_node("discovery", discovery_agent)
+    graph.add_node("curator", curator_agent)
+
+    # Sub-graph as a node
+    analysis_subgraph = create_analysis_subgraph()
+    graph.add_node("analyze", analysis_subgraph)
+
+    # Connect
+    graph.add_edge("discovery", "analyze")
+    graph.add_edge("analyze", "curator")
+    graph.add_edge("curator", END)
+
+    return graph.compile()
+```
+
+#### Retry Logic with Exponential Backoff
+
+```python
+def create_resilient_agent(agent_func, max_retries=3):
+    """
+    Wrap an agent with retry logic.
+
+    Useful for:
+    - API rate limits
+    - Transient network errors
+    - Flaky external services
+    """
+    def resilient_agent(state: PaperProcessingState) -> PaperProcessingState:
+        import time
+
+        for attempt in range(max_retries):
+            try:
+                return agent_func(state)
+            except RateLimitError as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.warning(f"Rate limited. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Failed after {max_retries} attempts")
+                    return {
+                        "errors": [f"Agent failed after {max_retries} retries: {e}"]
+                    }
+
+    return resilient_agent
+
+# Usage:
+graph.add_node("reader", create_resilient_agent(reader_agent))
+```
+
+---
+
+### 6. Best Practices for Production
+
+#### State Design Principles
+
+1. **Keep state flat** - Avoid deep nesting
+2. **Use type hints** - TypedDict for validation
+3. **Document reducers** - Explain merge logic
+4. **Include metadata** - Track costs, timing, errors
+5. **Plan for debugging** - Include audit fields from day 1
+
+#### Checkpointing Strategy
+
+```python
+# Good: Checkpoint after expensive operations
+graph.add_node("expensive_llm_call", llm_agent)  # Checkpoint automatically saved
+
+# Bad: Too frequent checkpointing (performance hit)
+# Don't checkpoint after every tiny operation
+
+# Best practice: Checkpoint at logical boundaries
+# - After each major agent
+# - Before/after API calls
+# - At decision points
+```
+
+#### Monitoring & Observability
+
+```python
+def instrumented_agent(agent_name: str, agent_func):
+    """Wrap agent with monitoring."""
+    def wrapper(state):
+        start = time.time()
+
+        try:
+            result = agent_func(state)
+            duration = time.time() - start
+
+            # Log metrics
+            logger.info(f"{agent_name} completed in {duration:.2f}s")
+            metrics.record(f"{agent_name}.duration", duration)
+            metrics.record(f"{agent_name}.success", 1)
+
+            return result
+        except Exception as e:
+            logger.error(f"{agent_name} failed: {e}")
+            metrics.record(f"{agent_name}.errors", 1)
+            raise
+
+    return wrapper
+```
+
+---
+
+### 7. Learning Exercises
+
+To master these patterns, try:
+
+1. **Add checkpointing** to the main pipeline
+   - Save state after each agent
+   - Implement resume functionality
+   - Build a replay debugger
+
+2. **Implement audit logging** for the curator agent
+   - Log why each paper was selected/rejected
+   - Track score components
+   - Visualize decision patterns
+
+3. **Build a human-in-loop review flow**
+   - Pause before sending emails
+   - Allow editing of paper selections
+   - Track approval rates
+
+4. **Add conditional routing** based on paper count
+   - If < 5 papers → expand search criteria
+   - If > 20 papers → increase threshold
+   - If 0 papers → alert user
+
+5. **Instrument the entire pipeline**
+   - Track timing for each agent
+   - Monitor API costs in real-time
+   - Set up alerts for errors
 
 ---
 
