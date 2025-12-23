@@ -1,26 +1,35 @@
 # ArXiv Learning Assistant
 
-Multi-agent system for discovering, explaining, and learning from AI research papers.
+Multi-agent system for discovering, explaining, and learning from AI research papers using LangGraph + Claude.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
-# 1. Set up environment
-python -m venv venv
+# 1. Set up environment (already done!)
 source venv/bin/activate
-pip install -r requirements.txt
 
-# 2. Configure
-cp .env.example .env
-# Edit .env with your API keys
+# 2. Add your API key to .env
+# ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 
 # 3. Initialize database
 python main.py --init-db
 
-# 4. Start discovering papers
-python main.py --discover --days 1
-python main.py --digest
+# 4. Test the full pipeline (recommended - start here!)
+python main.py --discover --days 1 --analyze --max-papers 2
+
+# 5. View results
+python main.py --stats
 ```
+
+## ✨ What's Working Now
+
+✅ **Discovery Agent** - Finds papers from arXiv
+✅ **Reader Agent** - Extracts structured info with Claude Haiku
+✅ **Explainer Agent** - Creates ELI5 explanations with Claude Sonnet
+✅ **Curator Agent** - Scores and ranks papers by relevance
+✅ **LangGraph Workflow** - Orchestrates all agents
+✅ **CLI Application** - Easy command-line interface
+✅ **Database** - SQLite storage with full schema
 
 ## Features (6-Week Build)
 
