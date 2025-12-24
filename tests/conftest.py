@@ -105,6 +105,8 @@ def sample_paper_data():
         "abstract_url": "http://arxiv.org/abs/2312.12345",
         "discovered_by": "arxiv",
     }
+
+
 """
 Additional test fixtures for proper database session mocking.
 """
@@ -116,14 +118,15 @@ from contextlib import contextmanager
 def create_mock_db_session(test_session):
     """
     Create a properly mocked get_db_session function.
-    
+
     Args:
         test_session: The test database session fixture
-        
+
     Returns:
         A callable that acts as a context manager yielding the test session
     """
+
     def mock_get_db_session():
         return test_session()
-    
+
     return mock_get_db_session

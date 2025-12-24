@@ -27,7 +27,7 @@ def sample_paper(db_session):
             discovered_by="arxiv",
         )
         db.add(paper)
-    
+
     with db_session() as db:
         return db.query(Paper).filter_by(arxiv_id="2312.12345").first()
 
@@ -86,7 +86,9 @@ class TestReaderAgent:
             assert "A, B, C et al." in prompt
 
     @patch("src.agents.reader.get_claude_client")
-    def test_analyze_paper_success(self, mock_get_client, sample_paper, mock_claude_analysis):
+    def test_analyze_paper_success(
+        self, mock_get_client, sample_paper, mock_claude_analysis
+    ):
         """Test successful paper analysis."""
         mock_client = Mock()
         mock_client.chat_json.return_value = mock_claude_analysis
@@ -148,7 +150,9 @@ class TestReaderAgent:
             db.add(paper)
 
         # Patch get_db_session to return a function that calls db_session
-        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
+        with patch(
+            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
+        ):
             reader = ReaderAgent()
             reader.save_analysis("2312.save.test", mock_claude_analysis)
 
@@ -160,7 +164,9 @@ class TestReaderAgent:
 
     def test_save_analysis_paper_not_found(self, db_session, mock_claude_analysis):
         """Test error when paper doesn't exist."""
-        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
+        with patch(
+            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
+        ):
             reader = ReaderAgent()
             with pytest.raises(ValueError) as exc_info:
                 reader.save_analysis("nonexistent.123", mock_claude_analysis)
@@ -187,7 +193,9 @@ class TestReaderAgent:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.batch.{i}").first())
+                papers.append(
+                    db.query(Paper).filter_by(arxiv_id=f"2312.batch.{i}").first()
+                )
 
         mock_analyze.return_value = {"main_claim": "Test"}
 
@@ -216,7 +224,9 @@ class TestReaderAgent:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.error.{i}").first())
+                papers.append(
+                    db.query(Paper).filter_by(arxiv_id=f"2312.error.{i}").first()
+                )
 
         def side_effect(paper):
             if "error.1" in paper.arxiv_id:
@@ -226,7 +236,9 @@ class TestReaderAgent:
         mock_analyze.side_effect = side_effect
 
         # Mock get_db_session for save_analysis calls
-        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
+        with patch(
+            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
+        ):
             reader = ReaderAgent()
             count = reader.analyze_and_save(papers)
 
@@ -256,11 +268,15 @@ class TestAnalyzePapersBatch:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.function.{i}").first())
+                papers.append(
+                    db.query(Paper).filter_by(arxiv_id=f"2312.function.{i}").first()
+                )
 
         mock_analyze_and_save.return_value = 2
 
-        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
+        with patch(
+            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
+        ):
             result = analyze_papers_batch(papers)
 
         assert isinstance(result, list)

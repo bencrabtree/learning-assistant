@@ -8,7 +8,11 @@ Complex database integration testing is covered by unit tests.
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
-from src.graph import run_full_pipeline, run_analysis_pipeline, run_discovery_only_pipeline
+from src.graph import (
+    run_full_pipeline,
+    run_analysis_pipeline,
+    run_discovery_only_pipeline,
+)
 from src.models.paper import Paper
 from src.database import init_db
 
@@ -68,9 +72,7 @@ class TestWorkflowOrchestration:
     @patch("src.graph.discover_papers")
     def test_discovery_only_workflow_orchestration(self, mock_discover):
         """Test discovery-only workflow orchestration."""
-        mock_papers = [
-            Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(3)
-        ]
+        mock_papers = [Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(3)]
 
         mock_discover.return_value = mock_papers
 

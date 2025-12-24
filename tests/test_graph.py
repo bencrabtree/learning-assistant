@@ -301,9 +301,9 @@ class TestAnalysisPipeline:
 
         # Get papers from database for mocking
         with db_session() as db:
-            created_papers = db.query(Paper).filter(
-                Paper.arxiv_id.like("2312.analysis%")
-            ).all()
+            created_papers = (
+                db.query(Paper).filter(Paper.arxiv_id.like("2312.analysis%")).all()
+            )
 
         # Mock returns
         analyzed = created_papers.copy()
