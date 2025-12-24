@@ -224,6 +224,9 @@ def reader_node(state: AgentState) -> AgentState:
         if not papers:
             logger.warning("No papers to analyze")
             state["analyzed_papers"] = []
+            if "stats" not in state or state["stats"] is None:
+                state["stats"] = {}
+            state["stats"]["analyzed_count"] = 0
             return state
 
         logger.info(f"Analyzing {len(papers)} papers with Claude Haiku...")
@@ -248,6 +251,9 @@ def reader_node(state: AgentState) -> AgentState:
             state["errors"] = []
         state["errors"].append(f"Reader error: {str(e)}")
         state["analyzed_papers"] = []
+        if "stats" not in state or state["stats"] is None:
+            state["stats"] = {}
+        state["stats"]["analyzed_count"] = 0
 
     return state
 
@@ -283,6 +289,10 @@ def explainer_node(state: AgentState) -> AgentState:
         if not papers:
             logger.warning("No papers to explain")
             state["explained_papers"] = []
+            state["final_papers"] = []
+            if "stats" not in state or state["stats"] is None:
+                state["stats"] = {}
+            state["stats"]["explained_count"] = 0
             return state
 
         logger.info(f"Explaining {len(papers)} papers with Claude Sonnet...")
