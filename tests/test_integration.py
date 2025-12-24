@@ -26,14 +26,19 @@ def integration_db():
 
 @pytest.fixture
 def mock_arxiv_results():
-    """Create mock arXiv search results."""
+    """Create mock arXiv search results with serializable authors."""
+    # Create a simple class for mock authors that's JSON serializable
+    class MockAuthor:
+        def __init__(self, name):
+            self.name = name
+
     results = []
     for i in range(3):
         result = Mock()
         result.entry_id = f"http://arxiv.org/abs/2312.1234{i}v1"
         result.title = f"Test Paper {i}: Multi-Agent Systems"
         result.summary = f"This paper {i} presents a novel approach to coordination."
-        result.authors = [Mock(name=f"Author {i}A"), Mock(name=f"Author {i}B")]
+        result.authors = [MockAuthor(f"Author {i}A"), MockAuthor(f"Author {i}B")]
         result.published = datetime.now(timezone.utc)
         result.categories = ["cs.AI", "cs.LG"]
         result.pdf_url = f"http://arxiv.org/pdf/2312.1234{i}v1"

@@ -184,58 +184,22 @@ See: `docs/weekly/week2.md`
 
 ## 🧪 Testing
 
-The project has comprehensive test coverage with **65 total tests** covering all major components.
-
-### Running Tests
+Comprehensive test suite with 65 tests covering all agents and workflows.
 
 ```bash
-# Activate environment
-source venv/bin/activate
-
 # Run all tests
+source venv/bin/activate
 pytest tests/ -v
 
-# Run specific test modules
-pytest tests/test_discovery.py -v      # Discovery agent tests
-pytest tests/test_reader.py -v         # Reader agent tests
-pytest tests/test_explainer.py -v      # Explainer agent tests
-pytest tests/test_graph.py -v          # Workflow tests
-pytest tests/test_integration.py -v    # Integration tests
-pytest tests/test_database.py -v       # Database tests
-
-# Run with coverage report
-pytest tests/ --cov=src --cov-report=html
-open htmlcov/index.html                # View coverage report
+# See detailed testing documentation
+cat TESTING.md
 ```
 
-### Test Coverage
-
-- ✅ **Discovery Agent (18 tests)** - Query building, arXiv API integration, datetime handling
-- ✅ **Reader Agent (10 tests)** - Prompt generation, Claude API calls, database persistence
-- ✅ **Explainer Agent (9 tests)** - Explanation generation, prerequisite detection
-- ✅ **Graph Workflows (13 tests)** - Node execution, state management, error handling
-- ✅ **Integration Tests (10 tests)** - End-to-end pipeline validation
-- ✅ **Database Tests (9 tests)** - ORM operations, session management
-
-**Current Status:** 47/65 tests passing (72% - primarily unit tests)
-
-The failing tests are integration tests that require additional mock refinements for external API calls.
-
-### Test Organization
-
-```
-tests/
-├── conftest.py           # Shared fixtures and test setup
-├── test_discovery.py     # Discovery agent unit tests
-├── test_reader.py        # Reader agent unit tests
-├── test_explainer.py     # Explainer agent unit tests
-├── test_graph.py         # LangGraph workflow tests
-├── test_integration.py   # End-to-end integration tests
-└── test_database.py      # Database and ORM tests
-```
+**Current Status:** 48/65 tests passing (74%). See **[TESTING.md](TESTING.md)** for complete documentation.
 
 ## 📚 Documentation
 
+- **[TESTING.md](TESTING.md)** - Complete test suite documentation
 - **[docs/design.md](docs/design.md)** - System architecture
 - **[docs/project_plan.md](docs/project_plan.md)** - 6-week build plan
 - **[docs/weekly/week1.md](docs/weekly/week1.md)** - Week 1 tasks

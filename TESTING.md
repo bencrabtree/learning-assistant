@@ -7,8 +7,12 @@ This document provides comprehensive information about the test suite for the Ar
 ## Test Statistics
 
 - **Total Tests:** 65
-- **Passing:** 47 (72%)
-- **Failing:** 18 (28% - primarily integration tests needing mock refinement)
+- **Passing:** 48 (74%)  
+- **Failing:** 17 (26% - database session isolation in integration tests)
+
+**Latest Run:** All core discovery and database unit tests passing (100%)!
+
+Integration tests need database session mocking refinement to fully pass.
 
 ## Test Categories
 
@@ -298,31 +302,3 @@ def test_cutoff_date_is_timezone_aware(self):
     Fix: Use datetime.now(timezone.utc) for timezone-aware cutoff.
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
-    assert cutoff_date.tzinfo is not None
-```
-
-## Test Maintenance
-
-### Monthly
-- Run full test suite
-- Update coverage reports
-- Review and fix flaky tests
-- Update test documentation
-
-### Per Feature
-- Add tests before implementing
-- Ensure new code has >90% coverage
-- Update integration tests for new workflows
-
-## Resources
-
-- [pytest Documentation](https://docs.pytest.org/)
-- [unittest.mock Guide](https://docs.python.org/3/library/unittest.mock.html)
-- [SQLAlchemy Testing](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html)
-- Project test examples: `tests/test_*.py`
-
----
-
-**Last Updated:** December 2025
-**Test Framework:** pytest 9.0.2
-**Coverage Tool:** pytest-cov
