@@ -53,7 +53,7 @@ python main.py --discover --days 7 --max-papers 10  # Limit papers
 ```bash
 python main.py --debug --discover --days 1  # Enable debug logging
 tail -f logs/app.log                  # View logs
-python test_pipeline.py               # Run tests
+pytest tests/ -v                      # Run tests
 ```
 
 ## 🏗️ Architecture
@@ -156,7 +156,7 @@ python main.py --init-db
 **Tests failing**
 ```bash
 pip install -r requirements.txt
-python test_pipeline.py
+pytest tests/ -v
 ```
 
 ## 🚀 Next Steps
@@ -182,8 +182,24 @@ See: `docs/weekly/week1.md` (Day 4)
 
 See: `docs/weekly/week2.md`
 
+## 🧪 Testing
+
+Comprehensive test suite with 64 tests covering all agents and workflows.
+
+```bash
+# Run all tests
+source venv/bin/activate
+pytest tests/ -v
+
+# See detailed testing documentation
+cat TESTING.md
+```
+
+**Current Status:** ✅ 64/64 tests passing (100%). See **[TESTING.md](TESTING.md)** for complete documentation.
+
 ## 📚 Documentation
 
+- **[TESTING.md](TESTING.md)** - Complete test suite documentation
 - **[docs/design.md](docs/design.md)** - System architecture
 - **[docs/project_plan.md](docs/project_plan.md)** - 6-week build plan
 - **[docs/weekly/week1.md](docs/weekly/week1.md)** - Week 1 tasks
