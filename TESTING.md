@@ -152,11 +152,6 @@ pytest tests/ --cov=src --cov-report=html
 open htmlcov/index.html
 ```
 
-### Run Only Passing Tests
-```bash
-pytest tests/test_discovery.py tests/test_database.py -v
-```
-
 ## Known Issues & Solutions
 
 ### Issue 1: Integration Test Mock Serialization
