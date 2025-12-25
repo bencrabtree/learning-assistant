@@ -5,11 +5,22 @@ This file defines common test fixtures used across multiple test files.
 """
 
 import pytest
+import os
 from datetime import datetime, timezone
 from unittest.mock import Mock
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
+
+
+# Set environment variables BEFORE any imports
+# This runs at module import time, before pytest fixture system
+os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-test-key-mock-for-testing")
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("LOG_LEVEL", "ERROR")
+
+
+# Import AFTER setting environment
 from src.models.paper import Base
 
 
@@ -105,25 +116,3 @@ def sample_paper_data():
         "abstract_url": "http://arxiv.org/abs/2312.12345",
         "discovered_by": "arxiv",
     }
-"""
-Additional test fixtures for proper database session mocking.
-"""
-
-from unittest.mock import MagicMock
-from contextlib import contextmanager
-
-
-def create_mock_db_session(test_session):
-    """
-    Create a properly mocked get_db_session function.
-    
-    Args:
-        test_session: The test database session fixture
-        
-    Returns:
-        A callable that acts as a context manager yielding the test session
-    """
-    def mock_get_db_session():
-        return test_session()
-    
-    return mock_get_db_session

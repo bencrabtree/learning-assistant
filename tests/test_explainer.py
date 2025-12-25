@@ -98,7 +98,9 @@ class TestExplainerAgent:
         assert "analyzed" in str(exc_info.value).lower()
 
     @patch("src.agents.explainer.get_claude_client")
-    def test_explain_paper_success(self, mock_get_client, analyzed_paper, mock_claude_explanation):
+    def test_explain_paper_success(
+        self, mock_get_client, analyzed_paper, mock_claude_explanation
+    ):
         """Test successful paper explanation."""
         mock_client = Mock()
         mock_client.chat_json.return_value = mock_claude_explanation
@@ -157,7 +159,9 @@ class TestExplainerAgent:
             db.add(paper)
 
         # Mock get_db_session to return test session
-        with patch("src.agents.explainer.get_db_session", side_effect=lambda: db_session()):
+        with patch(
+            "src.agents.explainer.get_db_session", side_effect=lambda: db_session()
+        ):
             explainer = ExplainerAgent()
             explainer.save_explanation("2312.save.expl", mock_claude_explanation)
 
@@ -169,7 +173,9 @@ class TestExplainerAgent:
 
     @patch.object(ExplainerAgent, "explain_paper")
     @patch.object(ExplainerAgent, "save_explanation")
-    def test_explain_and_save_skips_unanalyzed(self, mock_save, mock_explain, db_session):
+    def test_explain_and_save_skips_unanalyzed(
+        self, mock_save, mock_explain, db_session
+    ):
         """Test that explain_and_save skips unanalyzed papers."""
         with db_session() as db:
             analyzed = Paper(
@@ -213,7 +219,9 @@ class TestExplainerAgent:
 
     @patch.object(ExplainerAgent, "explain_paper")
     @patch("src.agents.explainer.get_db_session")
-    def test_explain_and_save_continues_on_error(self, mock_get_session, mock_explain, db_session):
+    def test_explain_and_save_continues_on_error(
+        self, mock_get_session, mock_explain, db_session
+    ):
         """Test that processing continues even if some papers fail."""
         mock_get_session.side_effect = lambda: db_session()
 
@@ -235,7 +243,9 @@ class TestExplainerAgent:
                 db.add(paper)
 
         with db_session() as db:
-            papers = db.query(Paper).filter(Paper.arxiv_id.like("2312.expl.error%")).all()
+            papers = (
+                db.query(Paper).filter(Paper.arxiv_id.like("2312.expl.error%")).all()
+            )
 
         def side_effect(paper):
             if "error.1" in paper.arxiv_id:
@@ -255,7 +265,9 @@ class TestExplainPapersBatch:
 
     @patch("src.agents.explainer.get_db_session")
     @patch.object(ExplainerAgent, "explain_and_save")
-    def test_explain_papers_batch(self, mock_explain_and_save, mock_get_session, db_session):
+    def test_explain_papers_batch(
+        self, mock_explain_and_save, mock_get_session, db_session
+    ):
         """Test explain_papers_batch function with proper session mocking."""
         mock_get_session.side_effect = lambda: db_session()
 
@@ -278,7 +290,9 @@ class TestExplainPapersBatch:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.batch.expl.{i}").first())
+                papers.append(
+                    db.query(Paper).filter_by(arxiv_id=f"2312.batch.expl.{i}").first()
+                )
 
         mock_explain_and_save.return_value = 2
 
