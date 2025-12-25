@@ -1,76 +1,78 @@
 # Project Plan: ArXiv Learning Assistant
 
-**Timeline:** 6 weeks (December 2025 - February 2026)  
-**Total Effort:** ~60-75 hours  
+**Learning-First Approach:** Build incrementally, ship working features, learn LangGraph patterns
+**Total Effort:** ~60-75 hours
 **Budget:** $60-125 (Claude API costs)
 
 ---
 
 ## Overview
 
-Incremental 6-week build delivering usable features each week. Every week builds on previous work and ships working code.
+Incremental build delivering usable features at each milestone. Each milestone builds on previous work and ships working code.
 
-## Weekly Plans
+This plan balances learning objectives (understanding LangGraph, multi-agent systems) with practical value (building a useful research assistant).
 
-📋 **[Week 1: Foundation - Core Discovery & Explanation](weekly/week1.md)**  
-Goal: Daily email with AI-explained papers  
-Time: 12-15 hours | Cost: $10-30
+## Development Milestones
 
-📋 **[Week 2: Social Signals - Twitter & HackerNews](weekly/week2.md)**  
-Goal: Papers ranked by social proof  
-Time: 10-12 hours | Cost: $5-15
+📋 **[Milestone 1: Deep Paper Analysis Engine](milestones/01-deep-paper-analysis.md)**
+**Delivers:** Single-paper deep dive with structured extraction and accessible explanations
+**Estimated effort:** 12-15 hours | Cost: $10-30
 
-📋 **[Week 3: Citation Intelligence - Velocity Tracking](weekly/week3.md)**  
-Goal: Surface trending papers  
-Time: 10-12 hours | Cost: $10-20
+📋 **[Milestone 2: Social Proof & Community Signals](milestones/02-social-proof-signals.md)**
+**Delivers:** Identify "hot papers" via Twitter, HackerNews, and lab publications
+**Estimated effort:** 10-12 hours | Cost: $5-15
 
-📋 **[Week 4: Knowledge Graph Visualization](weekly/week4.md)**  
-Goal: Interactive graph showing connections  
-Time: 12-15 hours | Cost: $15-25
+📋 **[Milestone 3: Citation Velocity & Trend Detection](milestones/03-citation-velocity.md)**
+**Delivers:** Detect papers gaining research momentum
+**Estimated effort:** 10-12 hours | Cost: $10-20
 
-📋 **[Week 5: Reading Progress Dashboard](weekly/week5.md)**  
-Goal: Track learning journey  
-Time: 10-12 hours | Cost: $10-20
+📋 **[Milestone 4: Interactive Knowledge Graph](milestones/04-knowledge-graph.md)**
+**Delivers:** Visual, explorable research landscape
+**Estimated effort:** 12-15 hours | Cost: $15-25
 
-📋 **[Week 6: Polish & Advanced Features](weekly/week6.md)**  
-Goal: Production-ready system  
-Time: 8-10 hours | Cost: $10-15
+📋 **[Milestone 5: Learning Progress & Personalization](milestones/05-learning-progress.md)**
+**Delivers:** Track learning journey and get personalized recommendations
+**Estimated effort:** 10-12 hours | Cost: $10-20
+
+📋 **[Milestone 6: Synthesis & Production Readiness](milestones/06-synthesis-production.md)**
+**Delivers:** Weekly insights and fully autonomous operation
+**Estimated effort:** 8-10 hours | Cost: $10-15
 
 ---
 
 ## Success Metrics
 
-### After Week 1
-- ✅ Receiving daily emails
-- ✅ Papers relevant to interests
-- ✅ Explanations are helpful
+### After Milestone 1
+- ✅ Can analyze individual papers quickly
+- ✅ Explanations are clear and helpful
+- ✅ Understand paper structure and claims
 
-### After Week 3
-- ✅ Email highlights important papers
-- ✅ System runs automatically
-- ✅ Low false positives (<10%)
+### After Milestone 3
+- ✅ System identifies trending papers early
+- ✅ Automated discovery running daily
+- ✅ High relevance to research interests
 
-### After Week 6
-- ✅ Use dashboard regularly (3+ times/week)
-- ✅ Reading 2x more papers
-- ✅ Feel less overwhelmed
-- ✅ Recommend to colleagues
+### After Milestone 6
+- ✅ Fully autonomous operation
+- ✅ Reading 2x more relevant papers
+- ✅ Clear learning progress tracking
+- ✅ System provides valuable insights
 
 ---
 
 ## Time & Cost Summary
 
-| Week | Focus | Hours | Cost | Deliverable |
-|------|-------|-------|------|-------------|
-| 1 | Foundation | 12-15 | $10-30 | Email digest |
-| 2 | Social Signals | 10-12 | $5-15 | Twitter/HN ranking |
-| 3 | Citations | 10-12 | $10-20 | Trending papers |
-| 4 | Knowledge Graph | 12-15 | $15-25 | Interactive viz |
-| 5 | Dashboard | 10-12 | $10-20 | Progress tracking |
-| 6 | Polish | 8-10 | $10-15 | Production ready |
+| Milestone | Focus | Hours | Cost | Deliverable |
+|-----------|-------|-------|------|-------------|
+| M1 | Deep Analysis | 12-15 | $10-30 | Paper analysis engine |
+| M2 | Social Signals | 10-12 | $5-15 | Twitter/HN tracking |
+| M3 | Citation Velocity | 10-12 | $10-20 | Trend detection |
+| M4 | Knowledge Graph | 12-15 | $15-25 | Interactive visualization |
+| M5 | Progress Tracking | 10-12 | $10-20 | Learning dashboard |
+| M6 | Production Polish | 8-10 | $10-15 | Autonomous system |
 | **Total** | **62-76** | **$60-125** | **Complete system** |
 
-**Monthly Ongoing:** $15-30 (mostly Claude API)
+**Monthly Ongoing:** $15-30 (mostly Claude API calls)
 
 ---
 
@@ -90,8 +92,8 @@ Time: 8-10 hours | Cost: $10-15
 - Email not sending → Check SMTP credentials
 - Dashboard slow → Enable Redis caching
 
-See individual weekly plans for detailed troubleshooting.
+See individual milestone docs for detailed implementation guidance.
 
 ---
 
-**Ready to start Week 1!** 🚀
+**Ready to start building!** 🚀
