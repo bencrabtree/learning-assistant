@@ -32,8 +32,8 @@ def engine():
 @pytest.fixture
 def session(engine):
     """Create a database session for testing."""
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
     yield session
     session.close()
 
