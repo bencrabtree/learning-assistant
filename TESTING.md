@@ -47,7 +47,11 @@ bandit -r src/ -c pyproject.toml
 mypy src/ --config-file=pyproject.toml
 ```
 
-See the **Quick Reference** section below for more details.
+### 💡 Pro Tip
+
+**Always run `./scripts/validate-ci.sh` before pushing!**
+
+This catches all lint issues, formatting problems, and test failures locally - saving you from failed CI/CD runs and wasted time.
 
 ---
 
