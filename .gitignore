@@ -18,6 +18,12 @@ logs/
 .mypy_cache/
 data/cache/*
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+
 # IDE
 .vscode/
 .idea/
