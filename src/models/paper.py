@@ -151,6 +151,22 @@ class Paper(Base):
     explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
+    # Citation Data - From Semantic Scholar API
+    # ------------------------------------------------------------------------
+    # Quick-access fields for latest citation metrics
+    # (Historical data stored in Citation table for velocity calculations)
+
+    # Total citation count (from Semantic Scholar)
+    citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Number of highly influential citations
+    # (Semantic Scholar's proprietary metric for citation quality)
+    influential_citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # When we last fetched citation data
+    citations_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ------------------------------------------------------------------------
     # Scoring Fields - Populated by Curator Agent
     # ------------------------------------------------------------------------
     # How relevant is this paper to the user?
