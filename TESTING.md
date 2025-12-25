@@ -57,15 +57,32 @@ See the **Quick Reference** section below for more details.
 # Run all tests
 pytest
 
+# Run ONLY unit tests (with coverage)
+pytest -m "not integration" --cov=src --cov-report=term-missing
+
+# Run ONLY integration tests (no coverage)
+pytest -m integration
+
 # Run with verbose output
 pytest -v
-
-# Run with coverage
-pytest --cov=src --cov-report=term-missing
 
 # Run specific test file
 pytest tests/test_discovery.py
 ```
+
+## Unit vs Integration Tests
+
+**Unit Tests:**
+- Test individual functions/classes in isolation
+- Fast execution (< 0.1s per test)
+- Required to have >80% code coverage
+- Run with: `pytest -m "not integration" --cov=src`
+
+**Integration Tests:**
+- Test how components work together
+- May be slower (external services, database operations)
+- Coverage NOT required (they test integration, not code paths)
+- Run with: `pytest -m integration`
 
 ## Environment Setup
 

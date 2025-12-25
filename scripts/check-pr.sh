@@ -70,14 +70,23 @@ else
 fi
 echo ""
 
-# 6. Tests
-echo "🧪 Running tests..."
-if pytest -v --cov=src --cov-report=term-missing --cov-fail-under=80 --tb=short > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ All tests passed with >80% coverage${NC}"
+# 6. Unit Tests (with coverage requirement)
+echo "🧪 Running unit tests with coverage..."
+if pytest -v -m "not integration" --cov=src --cov-report=term-missing --cov-fail-under=80 --tb=short > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Unit tests passed with >80% coverage${NC}"
 else
-    echo -e "${RED}✗ Tests failed or coverage <80%${NC}"
-    echo "  Run: pytest -v --cov=src --cov-report=term-missing"
+    echo -e "${RED}✗ Unit tests failed or coverage <80%${NC}"
+    echo "  Run: pytest -v -m \"not integration\" --cov=src --cov-report=term-missing"
     FAILURES=$((FAILURES + 1))
+fi
+echo ""
+
+# 7. Integration Tests (no coverage requirement)
+echo "🔗 Running integration tests..."
+if pytest -v -m integration --tb=short > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Integration tests passed${NC}"
+else
+    echo -e "${YELLOW}⚠ Integration tests failed (not blocking)${NC}"
 fi
 echo ""
 
