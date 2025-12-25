@@ -9,12 +9,13 @@ Tests the complete Paper model including:
 - Scoring fields
 """
 
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.models.paper import Base, Paper, Citation, SocialSignal, ReadingProgress
+from src.models.paper import Base, Citation, Paper
 
 
 @pytest.fixture
@@ -28,8 +29,8 @@ def engine():
 @pytest.fixture
 def session(engine):
     """Create a database session for testing."""
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
     yield session
     session.close()
 
