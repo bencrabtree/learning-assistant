@@ -1,246 +1,307 @@
 # ArXiv Learning Assistant
 
-Multi-agent system for discovering, explaining, and learning from AI research papers using LangGraph + Claude.
+An intelligent multi-agent system that transforms the overwhelming flood of AI research into personalized, accessible learning materials.
 
-## 🚀 Quick Start
+## The Problem
+
+With 200-300 new AI papers published daily on arXiv, staying current with research is nearly impossible. Existing solutions are either too noisy (RSS feeds) or miss important developments (social media). Researchers and practitioners need a way to:
+
+- **Filter** the flood of papers to what's relevant
+- **Understand** complex papers without deep expertise in every subfield
+- **Track** their learning progress and build knowledge systematically
+
+## The Solution
+
+This system uses a multi-agent architecture built on LangGraph and Claude AI to:
+
+1. **Discover** papers from arXiv based on configurable research interests
+2. **Analyze** papers with Claude to extract structured information (claims, methodology, results)
+3. **Explain** complex concepts in accessible language with learning-oriented summaries
+4. **Curate** content by scoring papers on relevance, novelty, and impact
+5. **Store** everything in a queryable knowledge base for later retrieval
+
+The result: A personalized research assistant that helps you stay current without drowning in noise.
+
+## Architecture
+
+### System Design
+
+The application follows a clean, layered architecture with separation of concerns:
+
+```
+┌─────────────────────────────────────┐
+│     CLI Interface (main.py)         │
+├─────────────────────────────────────┤
+│  LangGraph Workflows (src/graph.py) │
+│  • Discovery Pipeline               │
+│  • Analysis Pipeline                │
+│  • Full Pipeline                    │
+├─────────────────────────────────────┤
+│         Agent Layer                 │
+│  • Discovery Agent (arXiv API)      │
+│  • Reader Agent (Claude Haiku)      │
+│  • Explainer Agent (Claude Sonnet)  │
+│  • Curator Agent (Scoring)          │
+├─────────────────────────────────────┤
+│    Persistence Layer                │
+│  • SQLAlchemy ORM                   │
+│  • SQLite Database                  │
+└─────────────────────────────────────┘
+```
+
+### Multi-Agent Workflow
+
+Each agent is a specialized component with a single responsibility:
+
+**Discovery Agent**
+- Queries arXiv API with configurable categories and date ranges
+- Filters papers by publication date and relevance
+- Handles duplicate detection and deduplication
+
+**Reader Agent**
+- Uses Claude 3.5 Haiku for fast, cost-efficient extraction
+- Outputs structured JSON: main_claim, methodology, key_results, concepts, limitations
+- Implements error handling and retry logic
+
+**Explainer Agent**
+- Uses Claude Sonnet 4.5 for high-quality explanations
+- Generates ELI5 summaries, key insights, and learning questions
+- Identifies prerequisite concepts for learning paths
+
+**Curator Agent**
+- Scores papers based on multiple factors (interest match, novelty, citation velocity)
+- Ranks and filters to top N most relevant papers
+- Provides transparent scoring breakdowns
+
+### State Management
+
+LangGraph orchestrates agent execution and manages shared state:
+
+```python
+PipelineState = {
+    "discovered_papers": List[Paper],
+    "analyzed_papers": List[Analysis],
+    "explained_papers": List[Explanation],
+    "final_selection": List[RankedPaper],
+    "errors": List[str],
+}
+```
+
+State flows through the graph, with each agent reading inputs and writing outputs. This enables:
+- **Fault tolerance** - Agents continue on partial failures
+- **Observability** - Full state inspection at each step
+- **Flexibility** - Easy to add/remove agents or change flow
+
+## Key Features
+
+### Intelligent Paper Discovery
+- Configurable arXiv category filtering (cs.AI, cs.LG, cs.CL, etc.)
+- Date-based queries with timezone-aware filtering
+- Duplicate detection using arXiv IDs
+
+### Structured Analysis
+- Automated extraction of paper structure (claims, methods, results)
+- Identification of key technical concepts and terminology
+- Analysis of limitations and future work
+
+### Learning-Oriented Explanations
+- ELI5 summaries for quick understanding
+- Key insights highlighting the "so what?"
+- Learning questions to guide deeper study
+- Prerequisite concept identification
+
+### Personalized Curation
+- Relevance scoring based on research interests
+- Configurable filtering and ranking
+- Transparent score components for debugging
+
+### Comprehensive Testing
+- 79 unit and integration tests covering all components
+- Regression tests for critical bugs
+- In-memory database for fast, isolated testing
+- See [TESTING.md](TESTING.md) for details
+
+## Technical Implementation
+
+### Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Agent Orchestration | LangGraph | Multi-agent workflow management |
+| LLM Integration | Claude AI (Haiku + Sonnet) | Analysis and explanation |
+| Data Persistence | SQLAlchemy + SQLite | Structured storage and retrieval |
+| Testing | pytest | Unit, integration, and regression tests |
+| Configuration | pydantic + python-dotenv | Type-safe settings management |
+
+### Database Schema
+
+The system uses a normalized schema with proper relationships:
+
+```sql
+papers (
+    arxiv_id PRIMARY KEY,
+    title, abstract, authors, published_date,
+    categories, pdf_url, discovered_at,
+    -- Analysis fields
+    main_claim, methodology, key_results, concepts,
+    -- Explanation fields
+    eli5_summary, key_insight, learning_questions,
+    -- Curation fields
+    relevance_score, score_components
+)
+```
+
+### Cost Efficiency
+
+The system is designed to be cost-effective:
+
+- **Discovery**: Free (arXiv API)
+- **Reader**: ~$0.001/paper (Haiku)
+- **Explainer**: ~$0.015/paper (Sonnet)
+- **Total**: ~$0.016/paper
+
+Processing 10 papers/day costs ~$5/month.
+
+## Usage
+
+### Setup
 
 ```bash
-# 1. Activate environment
+# 1. Clone and install dependencies
+git clone <repository>
+cd arxiv-learning-assistant
+python -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
 
-# 2. Add your API key to .env
-# ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-# Get key from: https://console.anthropic.com/
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your API keys and preferences
 
 # 3. Initialize database
 python main.py --init-db
-
-# 4. Test the pipeline (2 papers, ~$0.03)
-python main.py --discover --days 1 --analyze --max-papers 2
-
-# 5. View results
-python main.py --stats
 ```
 
-## ✨ What's Working
+### Configuration
 
-✅ **Discovery Agent** - Finds papers from arXiv
-✅ **Reader Agent** - Extracts structured info with Claude Haiku
-✅ **Explainer Agent** - Creates ELI5 explanations with Claude Sonnet
-✅ **Curator Agent** - Scores and ranks papers by relevance
-✅ **LangGraph Workflows** - Orchestrates all agents
-✅ **CLI Application** - Easy command-line interface
-✅ **SQLite Database** - Full schema with relationships
-
-## 📖 Common Commands
-
-### Database
-```bash
-python main.py --init-db              # Initialize database
-python main.py --stats                # Show statistics
-python main.py --init-db --reset --yes  # Reset (deletes all data)
-```
-
-### Discovery & Analysis
-```bash
-python main.py --discover --days 1    # Find papers from last day
-python main.py --discover --days 1 --analyze  # Find and analyze
-python main.py --analyze              # Analyze existing papers
-python main.py --discover --days 7 --max-papers 10  # Limit papers
-```
-
-### Debugging
-```bash
-python main.py --debug --discover --days 1  # Enable debug logging
-tail -f logs/app.log                  # View logs
-pytest tests/ -v                      # Run tests
-```
-
-## 🏗️ Architecture
-
-```
-main.py (CLI)
-    └─> src/graph.py (LangGraph Workflows)
-            └─> src/agents/* (Business Logic)
-                    └─> src/database.py (Persistence)
-```
-
-**Three Workflows:**
-- `run_full_pipeline()` - Discovery → Reader → Explainer
-- `run_analysis_pipeline()` - Reader → Explainer (existing papers)
-- `run_discovery_only_pipeline()` - Discovery only
-
-## ⚙️ Customization
-
-Edit `.env` to customize:
+Edit `.env` to customize behavior:
 
 ```bash
-# Research interests (for scoring)
-RESEARCH_INTERESTS=transformers,RL,multimodal learning,agents
+# Required
+ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 
-# ArXiv categories to search
-ARXIV_CATEGORIES=cs.AI,cs.LG,cs.CL,cs.CV,cs.RO
+# Research interests (comma-separated)
+RESEARCH_INTERESTS=transformers,reinforcement learning,multimodal learning
 
-# Papers per digest
+# ArXiv categories to monitor
+ARXIV_CATEGORIES=cs.AI,cs.LG,cs.CL,cs.CV
+
+# Curation settings
 MAX_PAPERS_PER_DIGEST=10
 ```
 
-## 🔍 Understanding the Code
+### Running Pipelines
 
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `main.py` | CLI commands |
-| `src/graph.py` | LangGraph workflows |
-| `src/agents/reader.py` | Extract technical info |
-| `src/agents/explainer.py` | Create learning summaries |
-| `src/agents/curator.py` | Score and rank papers |
-| `src/database.py` | Database management |
-| `src/models/paper.py` | Data schema |
-
-### How It Works
-
-```
-1. Discovery → Finds papers from arXiv
-2. Reader → Extracts: main_claim, methodology, key_results, concepts
-3. Explainer → Creates: eli5_summary, key_insight, learning_questions
-4. Curator → Scores: relevance to your interests
-5. Database → Stores everything
-```
-
-### Learning Resources
-
-- **`docs/langgraph_intro.md`** - LangGraph concepts explained
-- **`CLAUDE.md`** - Architecture principles for AI-assisted development
-- **`src/graph.py`** - See how agents connect in workflows
-- **All agent files** - Extensively documented with examples
-
-Every function has detailed docstrings explaining what, why, and how!
-
-## 💰 Cost Estimates
-
-Per paper:
-- Discovery: Free (arXiv API)
-- Reader (Haiku): ~$0.001
-- Explainer (Sonnet): ~$0.015
-- **Total: ~$0.016/paper**
-
-Daily (5 papers): **~$0.08**
-Monthly (150 papers): **~$2.40**
-
-Very affordable! ☕
-
-## 🐛 Troubleshooting
-
-**"No papers found"**
 ```bash
-# Try longer time range
-python main.py --discover --days 7
-
-# Check your categories in .env
-cat .env | grep ARXIV_CATEGORIES
-```
-
-**"API key invalid"**
-- Get key from https://console.anthropic.com/
-- Add to `.env`: `ANTHROPIC_API_KEY=sk-ant-api03-...`
-- No quotes needed, no spaces around `=`
-
-**"Database locked"**
-```bash
-rm data/papers.db
-python main.py --init-db
-```
-
-**Tests failing**
-```bash
-pip install -r requirements.txt
-pytest tests/ -v
-```
-
-## 🚀 Next Steps
-
-### Option 1: Use It Daily
-```bash
-source venv/bin/activate
+# Discover and analyze papers from the last day
 python main.py --discover --days 1 --analyze
+
+# Discover papers from last week, limit to 5
+python main.py --discover --days 7 --max-papers 5
+
+# Analyze already-discovered papers
+python main.py --analyze
+
+# View statistics
 python main.py --stats
 ```
 
-### Option 2: Add Email Digest
-- Create email template
-- Configure SMTP in `.env`
-- Add email node to graph
-
-See: `docs/weekly/week1.md` (Day 4)
-
-### Option 3: Add Social Signals
-- Twitter API integration
-- HackerNews tracking
-- Enhanced scoring
-
-See: `docs/weekly/week2.md`
-
-## 🧪 Testing
-
-Comprehensive test suite with 64 tests covering all agents and workflows.
+### Database Operations
 
 ```bash
-# Run all tests
-source venv/bin/activate
-pytest tests/ -v
+# View database statistics
+python main.py --stats
 
-# See detailed testing documentation
-cat TESTING.md
+# Reset database (careful!)
+python main.py --init-db --reset --yes
+
+# Enable debug logging
+python main.py --debug --discover --days 1
 ```
 
-**Current Status:** ✅ 64/64 tests passing (100%). See **[TESTING.md](TESTING.md)** for complete documentation.
+## Development
 
-## 📚 Documentation
+### Running Tests
+
+```bash
+# All tests
+pytest tests/ -v
+
+# Specific test suite
+pytest tests/test_discovery.py -v
+pytest tests/test_reader.py -v
+pytest tests/test_claude_client.py -v
+
+# With coverage
+pytest tests/ --cov=src --cov-report=html
+open htmlcov/index.html
+```
+
+### Project Structure
+
+```
+arxiv-learning-assistant/
+├── main.py                    # CLI entry point
+├── src/
+│   ├── graph.py              # LangGraph workflow definitions
+│   ├── config.py             # Configuration management
+│   ├── database.py           # Database session management
+│   ├── agents/               # Agent implementations
+│   │   ├── discovery.py      # arXiv discovery
+│   │   ├── reader.py         # Paper analysis
+│   │   ├── explainer.py      # Explanation generation
+│   │   └── curator.py        # Scoring and ranking
+│   ├── models/               # SQLAlchemy models
+│   │   └── paper.py          # Paper schema
+│   └── services/             # External services
+│       └── claude_client.py  # Claude API wrapper
+├── tests/                    # Comprehensive test suite
+├── docs/                     # Documentation
+└── data/                     # Database and logs (gitignored)
+```
+
+### Architecture Principles
+
+The codebase follows clean architecture principles:
+
+1. **Single Execution Path** - All orchestration goes through LangGraph workflows
+2. **Layer Separation** - CLI → Graph → Agents → Database, no layer skipping
+3. **Dependency Injection** - External dependencies (Claude client, database) are injected
+4. **Comprehensive Testing** - All agents and workflows have unit and integration tests
+
+See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
+
+## Documentation
 
 - **[TESTING.md](TESTING.md)** - Complete test suite documentation
-- **[docs/design.md](docs/design.md)** - System architecture
-- **[docs/project_plan.md](docs/project_plan.md)** - 6-week build plan
-- **[docs/weekly/week1.md](docs/weekly/week1.md)** - Week 1 tasks
-- **[CLAUDE.md](CLAUDE.md)** - Development principles for AI assistance
+- **[docs/design.md](docs/design.md)** - Detailed system architecture
+- **[docs/langgraph_intro.md](docs/langgraph_intro.md)** - LangGraph concepts
+- **[CLAUDE.md](CLAUDE.md)** - Development principles and patterns
 
-## 🛠️ Tech Stack
+## Future Enhancements
 
-- **LangGraph** - Agent orchestration
-- **Claude** (Haiku + Sonnet) - AI analysis
-- **SQLAlchemy** - Database ORM
-- **SQLite** - Local storage
-- **Streamlit** (Week 5) - Dashboard
-- **NetworkX** (Week 4) - Knowledge graphs
+Potential directions for extension:
 
-## 📈 Roadmap (6-Week Build)
+- **Social Signals**: Integrate Twitter, HackerNews, and Reddit mentions for impact scoring
+- **Citation Velocity**: Track paper citations over time to identify emerging trends
+- **Knowledge Graphs**: Build concept networks to visualize relationships between papers
+- **Email Digests**: Automated daily/weekly summaries of top papers
+- **Web Dashboard**: Streamlit interface for exploring papers and tracking progress
 
-- ✅ **Week 1:** Core pipeline (discovery + analysis + explanation)
-- 🚧 **Week 2:** Social signals (Twitter, HackerNews)
-- 📅 **Week 3:** Citation velocity tracking
-- 📅 **Week 4:** Interactive knowledge graph
-- 📅 **Week 5:** Reading progress dashboard
-- 📅 **Week 6:** Production polish + synthesis
+## License
 
-## 📝 File Locations
-
-- Database: `data/papers.db`
-- Logs: `logs/app.log`
-- Config: `.env`
-- Weekly plans: `docs/weekly/`
-
-## 🤝 Contributing
-
-This is a learning project! Key principles:
-
-1. **Single execution path** - All orchestration through LangGraph
-2. **Imports at top** - No lazy imports
-3. **Layer separation** - CLI → Graph → Agents → Database
-4. **Documentation** - Every function explained
-
-See `CLAUDE.md` for full development guidelines.
+MIT License - See LICENSE file for details
 
 ---
 
-**Built with LangGraph + Claude** | *Helping you stay on top of AI research* 🚀
+**Built with LangGraph and Claude AI**

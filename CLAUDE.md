@@ -139,7 +139,47 @@ def test_arxiv_result_parsing():
 - Tests document behavior better than comments
 - Tests verify the fix actually works
 
-### 5. Consistency Checklist
+### 5. Pull Request Guidelines
+
+**Always create PRs with descriptive descriptions using the PR template.**
+
+When creating a pull request:
+
+1. **Use descriptive branch names**: `fix/claude-api-format`, `feat/email-digest`, `refactor/agent-structure`
+2. **Fill out the PR template completely** (`.github/pull_request_template.md`)
+3. **Write a clear summary** - What problem does this solve? What's the approach?
+4. **List all changes** - Make it easy for reviewers to understand what changed
+5. **Mark the type of change** - Bug fix, feature, refactor, docs, tests
+6. **Verify all tests pass** - Run `pytest tests/ -v` before creating PR
+7. **Self-review your code** - Read the diff on GitHub before requesting review
+
+**PR Description Template:**
+
+```markdown
+## Summary
+Brief description of what this PR accomplishes (1-2 sentences)
+
+## Changes
+- Change 1
+- Change 2
+- Change 3
+
+## Testing
+- [ ] All tests pass locally
+- [ ] Added new tests for changes
+- [ ] Manually tested changes
+
+## Type of Change
+- [x] Bug fix / New feature / Refactor / Documentation / Tests
+```
+
+**Why:**
+- PR descriptions are documentation for future reference
+- They help reviewers understand context quickly
+- They serve as release notes
+- They make git history more searchable
+
+### 6. Consistency Checklist
 
 Before committing any changes:
 
@@ -150,6 +190,7 @@ Before committing any changes:
 - [ ] Functions have docstrings
 - [ ] Follows existing patterns
 - [ ] Bug fixes have unit tests
+- [ ] PR description filled out completely
 
 ---
 
