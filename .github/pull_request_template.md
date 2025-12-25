@@ -27,19 +27,19 @@
 
 <!-- Describe the tests you ran to verify your changes -->
 
-- [ ] All tests pass locally (`pytest tests/ -v`)
-- [ ] Added new tests for changes
+- [ ] All tests pass locally (`./scripts/validate-ci.sh`)
+- [ ] Added new tests for changes (if applicable)
 - [ ] Manually tested changes
 
 ## Checklist
 
-- [ ] Code follows project style guidelines (run `black .`)
+- [ ] Ran `./scripts/validate-ci.sh` and all checks passed
 - [ ] Self-reviewed the code
 - [ ] Commented complex/non-obvious code
 - [ ] Updated documentation if needed
 - [ ] No new warnings generated
 - [ ] Added tests that prove the fix/feature works
-- [ ] New and existing tests pass locally
+- [ ] All sections of this PR template are filled out
 
 ## Related Issues
 

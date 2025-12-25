@@ -217,25 +217,9 @@ Before committing:
 - `refactor/agent-structure` - Code refactoring
 - `docs/update-readme` - Documentation
 
-**PR description template:**
+**PR template location:** `.github/pull_request_template.md`
 
-```markdown
-## Summary
-Brief description of what this PR accomplishes (1-2 sentences)
-
-## Changes
-- Change 1
-- Change 2
-- Change 3
-
-## Testing
-- [ ] All tests pass locally (`./scripts/validate-ci.sh`)
-- [ ] Added new tests for changes
-- [ ] Manually tested changes
-
-## Type of Change
-- [x] Bug fix / New feature / Refactor / Documentation / Tests
-```
+This template automatically populates when you create a PR on GitHub. Fill out ALL sections completely.
 
 **Why:** PR descriptions are documentation for future reference and serve as release notes.
 
