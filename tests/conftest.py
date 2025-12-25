@@ -45,7 +45,7 @@ def test_session(test_engine):
 
     This session is bound to the test database, not the production one.
     """
-    TestSessionLocal = sessionmaker(
+    test_session_local = sessionmaker(  # noqa: N806
         bind=test_engine,
         autoflush=False,
         autocommit=False,
@@ -54,7 +54,7 @@ def test_session(test_engine):
 
     @contextmanager
     def _get_test_session():
-        session = TestSessionLocal()
+        session = test_session_local()
         try:
             yield session
             session.commit()
