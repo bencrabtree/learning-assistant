@@ -26,6 +26,7 @@ def integration_db():
     yield
 
 
+@pytest.mark.integration
 class TestWorkflowOrchestration:
     """Test workflow orchestration without database complexity."""
 
@@ -129,6 +130,7 @@ class TestWorkflowOrchestration:
         assert result["stats"]["explained_count"] == 2
 
 
+@pytest.mark.integration
 class TestErrorHandling:
     """Test error handling in workflows."""
 
@@ -159,6 +161,7 @@ class TestErrorHandling:
         assert len(result["errors"]) > 0
 
 
+@pytest.mark.integration
 class TestStateManagement:
     """Test state propagation through workflows."""
 
