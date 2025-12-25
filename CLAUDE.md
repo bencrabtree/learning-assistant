@@ -239,6 +239,131 @@ Brief description of what this PR accomplishes (1-2 sentences)
 
 **Why:** PR descriptions are documentation for future reference and serve as release notes.
 
+### Step-by-Step PR Creation Process
+
+**1. Pre-Push Validation (CRITICAL)**
+
+Before creating a PR, **always** run the validation script:
+
+```bash
+./scripts/validate-ci.sh
+```
+
+This ensures:
+- ✅ Code is formatted (Black)
+- ✅ Imports are sorted (isort)
+- ✅ No lint errors (Ruff)
+- ✅ Type checking passes (MyPy)
+- ✅ Security scan passes (Bandit)
+- ✅ Unit tests pass with >80% coverage
+- ✅ Integration tests pass
+
+**If any check fails, fix it before pushing.** This saves CI/CD time and tokens.
+
+**2. Commit Your Changes**
+
+```bash
+# Stage all changes
+git add -A
+
+# Create descriptive commit
+git commit -m "feat: Add email digest functionality
+
+- Implement daily email scheduling
+- Add HTML email templates
+- Configure SMTP settings
+"
+
+# Verify commit
+git log -1
+```
+
+**3. Push to Remote**
+
+```bash
+# Push with upstream tracking
+git push -u origin your-branch-name
+
+# Example:
+git push -u origin feat/email-digest
+```
+
+**4. Create Pull Request**
+
+GitHub will show a URL after pushing:
+```
+remote: Create a pull request for 'your-branch-name' on GitHub by visiting:
+remote:      https://github.com/user/repo/pull/new/your-branch-name
+```
+
+Visit that URL or use GitHub CLI:
+```bash
+gh pr create --title "Your PR Title" --body "PR description here"
+```
+
+**5. Fill Out PR Description**
+
+Use the template and fill in ALL sections:
+
+```markdown
+## Summary
+[1-2 sentence description of what this accomplishes]
+
+## Changes
+- [Specific change 1 with file/function references]
+- [Specific change 2]
+- [Specific change 3]
+
+## Testing
+- [x] All tests pass locally (`./scripts/validate-ci.sh`)
+- [x] Added new tests for [specific functionality]
+- [x] Manually tested [specific scenarios]
+
+## Type of Change
+- [x] Bug fix
+- [ ] New feature
+- [ ] Refactor
+- [ ] Documentation
+- [ ] Tests
+```
+
+**6. Request Review (if applicable)**
+
+- Assign reviewers if working with a team
+- Link related issues with `Fixes #123` or `Relates to #456`
+- Add labels (bug, enhancement, documentation, etc.)
+
+### PR Review Checklist
+
+Before requesting review, verify:
+
+- [ ] PR title is clear and descriptive
+- [ ] All sections of template are filled out
+- [ ] Changes are focused (one feature/fix per PR)
+- [ ] No unrelated changes included
+- [ ] Tests cover new functionality
+- [ ] Documentation updated if needed
+- [ ] No secrets or sensitive data committed
+- [ ] CI/CD checks are passing
+
+### Common PR Mistakes to Avoid
+
+❌ **Don't:**
+- Create PR without running `validate-ci.sh` first
+- Leave template sections blank or with placeholder text
+- Mix unrelated changes in one PR
+- Commit commented-out code or debug statements
+- Push directly to main branch
+- Include secrets in commit history
+
+✅ **Do:**
+- Run validation before every push
+- Write descriptive commit messages
+- Keep PRs focused and atomic
+- Reference related issues
+- Update documentation with code changes
+- Clean up debug code before committing
+
 ---
 
 ## Coding Preferences
