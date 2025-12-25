@@ -269,9 +269,7 @@ class TestCitationModel:
         session.commit()
 
         # Verify
-        retrieved = (
-            session.query(Citation).filter_by(paper_id="2312.12351").first()
-        )
+        retrieved = session.query(Citation).filter_by(paper_id="2312.12351").first()
         assert retrieved.citation_count == 50
         assert retrieved.citations_this_week == 5
         assert retrieved.source == "semantic_scholar"
