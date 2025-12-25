@@ -10,14 +10,15 @@ Tests the complete Explainer Agent workflow including:
 - Error handling
 """
 
-import pytest
 from datetime import datetime
 from unittest.mock import Mock, patch
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.models.paper import Base, Paper
 from src.agents.explainer import ExplainerAgent, explain_papers_batch
+from src.models.paper import Base, Paper
 
 
 @pytest.fixture
@@ -289,14 +290,10 @@ class TestExplainerAgent:
 
             with patch("src.agents.explainer.get_claude_client"):
                 explainer = ExplainerAgent()
-                explainer.save_explanation(
-                    analyzed_paper.arxiv_id, mock_explanation_response
-                )
+                explainer.save_explanation(analyzed_paper.arxiv_id, mock_explanation_response)
 
         # Verify paper was updated
-        updated = (
-            session.query(Paper).filter_by(arxiv_id=analyzed_paper.arxiv_id).first()
-        )
+        updated = session.query(Paper).filter_by(arxiv_id=analyzed_paper.arxiv_id).first()
         assert "self-correct" in updated.eli5_summary
         assert updated.key_insight is not None
         assert len(updated.learning_questions) == 3
@@ -306,9 +303,7 @@ class TestExplainerAgent:
         """Test that save_explanation raises error for non-existent paper."""
         with patch("src.agents.explainer.get_db_session") as mock_get_session:
             mock_session = Mock()
-            mock_session.query.return_value.filter_by.return_value.first.return_value = (
-                None
-            )
+            mock_session.query.return_value.filter_by.return_value.first.return_value = None
             mock_get_session.return_value.__enter__.return_value = mock_session
             mock_get_session.return_value.__exit__.return_value = None
 
