@@ -6,19 +6,30 @@ Comprehensive testing setup for the ArXiv Learning Assistant.
 
 **Before creating a PR**, run all quality checks locally to ensure CI/CD will pass:
 
-### One-Command Check
+### Full CI/CD Validation (Recommended)
 
 ```bash
-./scripts/check-pr.sh
+./scripts/validate-ci.sh
 ```
 
-This runs all checks that GitHub Actions will run:
+This runs **exactly** what GitHub Actions will run:
 - ✅ Code formatting (Black)
 - ✅ Import sorting (isort)
 - ✅ Linting (Ruff)
 - ✅ Type checking (MyPy)
 - ✅ Security scan (Bandit)
-- ✅ Tests with >80% coverage
+- ✅ Unit tests with >80% coverage
+- ✅ Integration tests
+
+**Use this before every push to avoid failed CI/CD runs.**
+
+### Quick Check (Faster)
+
+```bash
+./scripts/check-pr.sh
+```
+
+Runs the same checks but with less verbose output.
 
 ### Individual Quality Checks
 
