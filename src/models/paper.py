@@ -164,7 +164,7 @@ class Paper(Base):
     influential_citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # When we last fetched citation data
-    citations_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    citations_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
     # Scoring Fields - Populated by Curator Agent
