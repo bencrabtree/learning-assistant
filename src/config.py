@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     )
 
     explainer_model: str = Field(
-        default="claude-3-5-sonnet-20241022",
+        default="claude-sonnet-4-5-20250929",
         alias="EXPLAINER_MODEL",
         description="Claude model for explanations (use Sonnet for quality)",
     )

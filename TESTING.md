@@ -67,6 +67,23 @@ Tests database operations with isolated in-memory database.
 - Timestamp automation
 - Query operations
 
+### Claude Client Tests (`test_claude_client.py`)
+
+Tests Claude API wrapper for proper parameter formatting.
+
+**Coverage:**
+- System prompt format validation (list of text blocks)
+- API parameter construction
+- JSON response parsing
+- Markdown code block stripping
+- Retry logic for malformed JSON
+- Cost estimation
+- Singleton pattern
+
+**Critical Regression Tests:**
+- **System Prompt Format**: Ensures system parameter is formatted as `[{"type": "text", "text": "..."}]` not plain string
+- **System Prompt Omission**: Verifies system parameter is excluded when not provided
+
 ### Reader Agent Tests (`test_reader.py`)
 
 Tests Claude API integration for paper analysis.
