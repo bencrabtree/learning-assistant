@@ -5,8 +5,10 @@ Tests the ClaudeClient wrapper to ensure proper API parameter formatting,
 especially the system prompt format which must be a list of text blocks.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+
 from src.services.claude_client import ClaudeClient
 
 
@@ -40,7 +42,7 @@ class TestChatMethod:
 
         # Call chat without system prompt
         client = ClaudeClient()
-        response = client.chat(prompt="Hello")
+        client.chat(prompt="Hello")
 
         # Verify API was called correctly
         mock_client.messages.create.assert_called_once()
@@ -67,7 +69,7 @@ class TestChatMethod:
 
         # Call chat WITH system prompt
         client = ClaudeClient()
-        response = client.chat(prompt="Hello", system="You are a helpful assistant")
+        client.chat(prompt="Hello", system="You are a helpful assistant")
 
         # Verify API was called correctly
         mock_client.messages.create.assert_called_once()
@@ -94,7 +96,7 @@ class TestChatMethod:
 
         # Call with all params
         client = ClaudeClient()
-        response = client.chat(
+        client.chat(
             prompt="Test prompt",
             model="claude-3-5-haiku-20241022",
             system="System message",
@@ -160,15 +162,11 @@ class TestChatJsonMethod:
 
         # Call chat_json with system prompt
         client = ClaudeClient()
-        result = client.chat_json(
-            prompt="Extract data", system="You are a JSON extractor"
-        )
+        client.chat_json(prompt="Extract data", system="You are a JSON extractor")
 
         # Verify system prompt formatted correctly
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["system"] == [
-            {"type": "text", "text": "You are a JSON extractor"}
-        ]
+        assert call_kwargs["system"] == [{"type": "text", "text": "You are a JSON extractor"}]
 
     @patch("src.services.claude_client.Anthropic")
     def test_chat_json_parses_json_response(self, mock_anthropic):
@@ -287,10 +285,9 @@ class TestGlobalClientInstance:
     @patch("src.services.claude_client.ClaudeClient")
     def test_get_claude_client_singleton(self, mock_client_class):
         """Test that get_claude_client returns same instance."""
-        from src.services.claude_client import get_claude_client, _client
-
         # Reset the global client
         import src.services.claude_client
+        from src.services.claude_client import get_claude_client
 
         src.services.claude_client._client = None
 

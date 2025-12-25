@@ -16,7 +16,8 @@ Why wrap the API?
 - Track API usage and costs
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 from anthropic import Anthropic
 from loguru import logger
 
@@ -41,7 +42,7 @@ class ClaudeClient:
         print(response)
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize the Claude client.
 
@@ -55,8 +56,8 @@ class ClaudeClient:
     def chat(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        system: Optional[str] = None,
+        model: str | None = None,
+        system: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 1.0,
         **kwargs,
@@ -125,11 +126,11 @@ class ClaudeClient:
     def chat_json(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        system: Optional[str] = None,
+        model: str | None = None,
+        system: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Send a prompt to Claude and get a JSON response.
 
@@ -240,7 +241,7 @@ ONLY JSON."""
             raise
 
     def estimate_cost(
-        self, input_tokens: int, output_tokens: int, model: Optional[str] = None
+        self, input_tokens: int, output_tokens: int, model: str | None = None
     ) -> float:
         """
         Estimate the cost of an API call.
@@ -298,7 +299,7 @@ ONLY JSON."""
 
 # Create a singleton client instance
 # This avoids creating multiple API clients
-_client: Optional[ClaudeClient] = None
+_client: ClaudeClient | None = None
 
 
 def get_claude_client() -> ClaudeClient:

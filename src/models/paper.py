@@ -16,10 +16,10 @@ Why ORM?
 """
 
 from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import String, Integer, DateTime, Float, JSON, Text, ForeignKey, Index
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import Optional
 
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # ============================================================================
 # Base class for all models
@@ -74,13 +74,13 @@ class Paper(Base):
 
     # JSON field to store list of author names
     # Example: ["John Doe", "Jane Smith", "Bob Johnson"]
-    authors: Mapped[List[str]] = mapped_column(JSON, nullable=False)
+    authors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
 
     # When the paper was published on arXiv
     published_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     # ArXiv categories, e.g., ["cs.AI", "cs.LG"]
-    categories: Mapped[List[str]] = mapped_column(JSON, nullable=False)
+    categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
 
     # URLs to the paper
     pdf_url: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -96,7 +96,7 @@ class Paper(Base):
 
     # Optional: which AI lab published this (if any)
     # Example: "OpenAI", "Google DeepMind", "Anthropic"
-    lab_published_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lab_published_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # ------------------------------------------------------------------------
     # Analysis Fields - Populated by Reader Agent
@@ -104,26 +104,26 @@ class Paper(Base):
     # These are filled in after we analyze the paper with Claude
 
     # What's the main claim or contribution?
-    main_claim: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    main_claim: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # What methods did they use?
-    methodology: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    methodology: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # List of key results as strings
-    key_results: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    key_results: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # What's novel about this work?
-    novel_contributions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    novel_contributions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # What are the limitations?
-    limitations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    limitations: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # List of technical concepts mentioned
     # Example: ["transformer architecture", "attention mechanism", "BERT"]
-    concepts: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    concepts: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # When the analysis was done
-    analyzed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
     # Explanation Fields - Populated by Explainer Agent
@@ -131,24 +131,24 @@ class Paper(Base):
     # These make the paper accessible to learners
 
     # ELI5 (Explain Like I'm 5) summary for non-experts
-    eli5_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    eli5_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # The one key insight to remember
-    key_insight: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    key_insight: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Questions to think about while reading
     # Example: ["How does this compare to GPT-4?", "Why use this architecture?"]
-    learning_questions: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    learning_questions: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # What you should understand first
     # Example: ["attention mechanism", "transformer architecture"]
-    prerequisites: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    prerequisites: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # Related concepts for further learning
-    related_concepts: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    related_concepts: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # When the explanation was generated
-    explained_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
     # Scoring Fields - Populated by Curator Agent
@@ -156,14 +156,14 @@ class Paper(Base):
     # How relevant is this paper to the user?
 
     # Overall relevance score (0-1, higher = more relevant)
-    relevance_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Breakdown of score components (for debugging and transparency)
     # Example: {"interest_match": 0.85, "social_proof": 0.6, "citation_velocity": 0.3}
-    score_components: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    score_components: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # When the score was calculated
-    scored_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
     # Relationships - Links to other tables
@@ -171,13 +171,13 @@ class Paper(Base):
     # SQLAlchemy relationships let us easily access related data
     # Example: paper.citations will give us all Citation objects for this paper
 
-    citations: Mapped[List["Citation"]] = relationship(
+    citations: Mapped[list["Citation"]] = relationship(
         "Citation",
         back_populates="paper",
         cascade="all, delete-orphan",  # If we delete a paper, delete its citations too
     )
 
-    social_signals: Mapped[List["SocialSignal"]] = relationship(
+    social_signals: Mapped[list["SocialSignal"]] = relationship(
         "SocialSignal", back_populates="paper", cascade="all, delete-orphan"
     )
 
@@ -236,18 +236,14 @@ class Citation(Base):
     citation_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # When we measured this count
-    measured_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
-    )
+    measured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Derived metrics (calculated from historical data)
-    citations_this_week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    velocity_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    citations_this_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    velocity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Where we got this data from
-    source: Mapped[str] = mapped_column(
-        String(50), default="semantic_scholar", nullable=False
-    )
+    source: Mapped[str] = mapped_column(String(50), default="semantic_scholar", nullable=False)
 
     # Relationship back to the paper
     paper: Mapped["Paper"] = relationship("Paper", back_populates="citations")
@@ -299,10 +295,10 @@ class SocialSignal(Base):
     comments_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Text snippet or quote
-    snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Who posted it (username or account name)
-    author: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    author: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # When it was posted
     posted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -351,15 +347,15 @@ class ReadingProgress(Base):
     status: Mapped[str] = mapped_column(String(20), default="unread", nullable=False)
 
     # Timestamps
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # User feedback
-    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5 stars
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # How long they spent reading (in minutes)
-    time_spent_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    time_spent_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationship back to the paper
     paper: Mapped["Paper"] = relationship("Paper", back_populates="reading_progress")

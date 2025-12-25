@@ -4,9 +4,11 @@ Comprehensive Unit Tests for Explainer Agent
 All tests properly isolated with database session mocking.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
+
+import pytest
+
 from src.agents.explainer import ExplainerAgent, explain_papers_batch
 from src.models.paper import Paper
 
@@ -20,7 +22,7 @@ def analyzed_paper(db_session):
             title="Multi-Agent Coordination",
             abstract="This paper presents multi-agent coordination.",
             authors=["Alice", "Bob"],
-            published_date=datetime.now(timezone.utc),
+            published_date=datetime.now(UTC),
             categories=["cs.AI"],
             pdf_url="http://example.com/pdf",
             abstract_url="http://example.com/abs",
@@ -29,7 +31,7 @@ def analyzed_paper(db_session):
         paper.main_claim = "LLMs enable effective multi-agent coordination"
         paper.methodology = "Framework using Claude API"
         paper.key_results = ["85% success rate", "40% reduced overhead"]
-        paper.analyzed_at = datetime.now(timezone.utc)
+        paper.analyzed_at = datetime.now(UTC)
         db.add(paper)
 
     with db_session() as db:
@@ -45,7 +47,7 @@ def unanalyzed_paper(db_session):
             title="Test Paper",
             abstract="Abstract",
             authors=["Test"],
-            published_date=datetime.now(timezone.utc),
+            published_date=datetime.now(UTC),
             categories=["cs.AI"],
             pdf_url="http://example.com/pdf",
             abstract_url="http://example.com/abs",
@@ -98,9 +100,7 @@ class TestExplainerAgent:
         assert "analyzed" in str(exc_info.value).lower()
 
     @patch("src.agents.explainer.get_claude_client")
-    def test_explain_paper_success(
-        self, mock_get_client, analyzed_paper, mock_claude_explanation
-    ):
+    def test_explain_paper_success(self, mock_get_client, analyzed_paper, mock_claude_explanation):
         """Test successful paper explanation."""
         mock_client = Mock()
         mock_client.chat_json.return_value = mock_claude_explanation
@@ -148,20 +148,18 @@ class TestExplainerAgent:
                 title="Test",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
                 discovered_by="test",
             )
             paper.main_claim = "Test claim"
-            paper.analyzed_at = datetime.now(timezone.utc)
+            paper.analyzed_at = datetime.now(UTC)
             db.add(paper)
 
         # Mock get_db_session to return test session
-        with patch(
-            "src.agents.explainer.get_db_session", side_effect=lambda: db_session()
-        ):
+        with patch("src.agents.explainer.get_db_session", side_effect=lambda: db_session()):
             explainer = ExplainerAgent()
             explainer.save_explanation("2312.save.expl", mock_claude_explanation)
 
@@ -173,9 +171,7 @@ class TestExplainerAgent:
 
     @patch.object(ExplainerAgent, "explain_paper")
     @patch.object(ExplainerAgent, "save_explanation")
-    def test_explain_and_save_skips_unanalyzed(
-        self, mock_save, mock_explain, db_session
-    ):
+    def test_explain_and_save_skips_unanalyzed(self, mock_save, mock_explain, db_session):
         """Test that explain_and_save skips unanalyzed papers."""
         with db_session() as db:
             analyzed = Paper(
@@ -183,21 +179,21 @@ class TestExplainerAgent:
                 title="Analyzed",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf1",
                 abstract_url="http://example.com/abs1",
                 discovered_by="test",
             )
             analyzed.main_claim = "Claim"
-            analyzed.analyzed_at = datetime.now(timezone.utc)
+            analyzed.analyzed_at = datetime.now(UTC)
 
             unanalyzed = Paper(
                 arxiv_id="2312.unanalyzed.1",
                 title="Unanalyzed",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf2",
                 abstract_url="http://example.com/abs2",
@@ -219,9 +215,7 @@ class TestExplainerAgent:
 
     @patch.object(ExplainerAgent, "explain_paper")
     @patch("src.agents.explainer.get_db_session")
-    def test_explain_and_save_continues_on_error(
-        self, mock_get_session, mock_explain, db_session
-    ):
+    def test_explain_and_save_continues_on_error(self, mock_get_session, mock_explain, db_session):
         """Test that processing continues even if some papers fail."""
         mock_get_session.side_effect = lambda: db_session()
 
@@ -232,20 +226,18 @@ class TestExplainerAgent:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
                     discovered_by="test",
                 )
                 paper.main_claim = "Claim"
-                paper.analyzed_at = datetime.now(timezone.utc)
+                paper.analyzed_at = datetime.now(UTC)
                 db.add(paper)
 
         with db_session() as db:
-            papers = (
-                db.query(Paper).filter(Paper.arxiv_id.like("2312.expl.error%")).all()
-            )
+            papers = db.query(Paper).filter(Paper.arxiv_id.like("2312.expl.error%")).all()
 
         def side_effect(paper):
             if "error.1" in paper.arxiv_id:
@@ -265,9 +257,7 @@ class TestExplainPapersBatch:
 
     @patch("src.agents.explainer.get_db_session")
     @patch.object(ExplainerAgent, "explain_and_save")
-    def test_explain_papers_batch(
-        self, mock_explain_and_save, mock_get_session, db_session
-    ):
+    def test_explain_papers_batch(self, mock_explain_and_save, mock_get_session, db_session):
         """Test explain_papers_batch function with proper session mocking."""
         mock_get_session.side_effect = lambda: db_session()
 
@@ -279,20 +269,18 @@ class TestExplainPapersBatch:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
                     discovered_by="test",
                 )
                 paper.main_claim = "Claim"
-                paper.analyzed_at = datetime.now(timezone.utc)
+                paper.analyzed_at = datetime.now(UTC)
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(
-                    db.query(Paper).filter_by(arxiv_id=f"2312.batch.expl.{i}").first()
-                )
+                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.batch.expl.{i}").first())
 
         mock_explain_and_save.return_value = 2
 

@@ -4,17 +4,19 @@ Comprehensive Unit Tests for LangGraph Workflows
 Fixed with proper state initialization and mocking.
 """
 
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
-from datetime import datetime, timezone
+
+import pytest
+
 from src.graph import (
-    discovery_node,
-    reader_node,
-    explainer_node,
     create_workflow,
-    run_full_pipeline,
-    run_discovery_only_pipeline,
+    discovery_node,
+    explainer_node,
+    reader_node,
     run_analysis_pipeline,
+    run_discovery_only_pipeline,
+    run_full_pipeline,
 )
 from src.models.paper import Paper
 
@@ -29,7 +31,7 @@ def mock_papers():
         paper.title = f"Test Paper {i}"
         paper.abstract = "Abstract"
         paper.authors = ["Test"]
-        paper.published_date = datetime.now(timezone.utc)
+        paper.published_date = datetime.now(UTC)
         paper.categories = ["cs.AI"]
         paper.main_claim = None
         paper.analyzed_at = None
@@ -106,7 +108,7 @@ class TestNodeFunctions:
         analyzed_papers = mock_papers.copy()
         for p in analyzed_papers:
             p.main_claim = "Test claim"
-            p.analyzed_at = datetime.now(timezone.utc)
+            p.analyzed_at = datetime.now(UTC)
 
         mock_analyze.return_value = analyzed_papers
 
@@ -161,7 +163,7 @@ class TestNodeFunctions:
         explained_papers = mock_papers.copy()
         for p in explained_papers:
             p.eli5_summary = "Simple explanation"
-            p.explained_at = datetime.now(timezone.utc)
+            p.explained_at = datetime.now(UTC)
 
         mock_explain.return_value = explained_papers
 
@@ -225,13 +227,13 @@ class TestFullPipeline:
         analyzed = mock_papers.copy()
         for p in analyzed:
             p.main_claim = "Claim"
-            p.analyzed_at = datetime.now(timezone.utc)
+            p.analyzed_at = datetime.now(UTC)
         mock_analyze.return_value = analyzed
 
         explained = analyzed.copy()
         for p in explained:
             p.eli5_summary = "Summary"
-            p.explained_at = datetime.now(timezone.utc)
+            p.explained_at = datetime.now(UTC)
         mock_explain.return_value = explained
 
         result = run_full_pipeline(days_back=7, max_papers=2)
@@ -277,9 +279,7 @@ class TestAnalysisPipeline:
     @patch("src.graph.get_db_session")
     @patch("src.graph.analyze_papers_batch")
     @patch("src.graph.explain_papers_batch")
-    def test_run_analysis_pipeline(
-        self, mock_explain, mock_analyze, mock_get_session, db_session
-    ):
+    def test_run_analysis_pipeline(self, mock_explain, mock_analyze, mock_get_session, db_session):
         """Test analysis pipeline on existing papers."""
         mock_get_session.side_effect = lambda: db_session()
 
@@ -291,7 +291,7 @@ class TestAnalysisPipeline:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
@@ -301,21 +301,19 @@ class TestAnalysisPipeline:
 
         # Get papers from database for mocking
         with db_session() as db:
-            created_papers = (
-                db.query(Paper).filter(Paper.arxiv_id.like("2312.analysis%")).all()
-            )
+            created_papers = db.query(Paper).filter(Paper.arxiv_id.like("2312.analysis%")).all()
 
         # Mock returns
         analyzed = created_papers.copy()
         for p in analyzed:
             p.main_claim = "Claim"
-            p.analyzed_at = datetime.now(timezone.utc)
+            p.analyzed_at = datetime.now(UTC)
         mock_analyze.return_value = analyzed
 
         explained = analyzed.copy()
         for p in explained:
             p.eli5_summary = "Summary"
-            p.explained_at = datetime.now(timezone.utc)
+            p.explained_at = datetime.now(UTC)
         mock_explain.return_value = explained
 
         result = run_analysis_pipeline()

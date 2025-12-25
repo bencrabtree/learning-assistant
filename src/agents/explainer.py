@@ -29,13 +29,14 @@ Example:
     print(explanation["eli5_summary"])
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from loguru import logger
 
-from src.models.paper import Paper
-from src.services.claude_client import get_claude_client
 from src.config import settings
 from src.database import get_db_session
+from src.models.paper import Paper
+from src.services.claude_client import get_claude_client
 
 
 class ExplainerAgent:
@@ -87,8 +88,7 @@ class ExplainerAgent:
         # Check if paper has been analyzed
         if not paper.main_claim:
             raise ValueError(
-                f"Paper {paper.arxiv_id} hasn't been analyzed yet. "
-                "Run Reader agent first."
+                f"Paper {paper.arxiv_id} hasn't been analyzed yet. " "Run Reader agent first."
             )
 
         # Format concepts as a readable list
@@ -144,7 +144,7 @@ IMPORTANT:
 
         return prompt
 
-    def explain_paper(self, paper: Paper) -> Dict[str, Any]:
+    def explain_paper(self, paper: Paper) -> dict[str, Any]:
         """
         Create a learning-friendly explanation for a paper.
 
@@ -217,9 +217,7 @@ IMPORTANT:
                         explanation[field] = "Not available"
 
             logger.info(f"✅ Explanation complete for {paper.arxiv_id}")
-            logger.debug(
-                f"Generated {len(explanation['learning_questions'])} learning questions"
-            )
+            logger.debug(f"Generated {len(explanation['learning_questions'])} learning questions")
 
             return explanation
 
@@ -227,7 +225,7 @@ IMPORTANT:
             logger.error(f"❌ Failed to explain paper {paper.arxiv_id}: {e}")
             raise
 
-    def explain_papers(self, papers: List[Paper]) -> List[Dict[str, Any]]:
+    def explain_papers(self, papers: list[Paper]) -> list[dict[str, Any]]:
         """
         Explain multiple papers.
 
@@ -272,13 +270,10 @@ IMPORTANT:
                 failed += 1
                 continue
 
-        logger.info(
-            f"✅ Explained {len(results)} papers "
-            f"({skipped} skipped, {failed} failed)"
-        )
+        logger.info(f"✅ Explained {len(results)} papers " f"({skipped} skipped, {failed} failed)")
         return results
 
-    def save_explanation(self, arxiv_id: str, explanation: Dict[str, Any]) -> None:
+    def save_explanation(self, arxiv_id: str, explanation: dict[str, Any]) -> None:
         """
         Save explanation results to the database.
 
@@ -316,7 +311,7 @@ IMPORTANT:
             # Commit happens automatically when we exit the with block
             logger.debug(f"✅ Saved explanation for {arxiv_id}")
 
-    def explain_and_save(self, papers: List[Paper]) -> int:
+    def explain_and_save(self, papers: list[Paper]) -> int:
         """
         Explain papers and save results to database.
 
@@ -379,7 +374,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def explain_papers_batch(papers: List[Paper]) -> List[Paper]:
+def explain_papers_batch(papers: list[Paper]) -> list[Paper]:
     """
     Batch explain papers and return updated Paper objects.
 
@@ -438,15 +433,15 @@ if __name__ == "__main__":
             print(f"\n📚 ELI5 Summary:\n{explanation['eli5_summary']}")
             print(f"\n💡 Key Insight:\n{explanation['key_insight']}")
 
-            print(f"\n❓ Learning Questions:")
+            print("\n❓ Learning Questions:")
             for i, q in enumerate(explanation["learning_questions"], 1):
                 print(f"  {i}. {q}")
 
-            print(f"\n📖 Prerequisites:")
+            print("\n📖 Prerequisites:")
             for i, prereq in enumerate(explanation["prerequisites"], 1):
                 print(f"  {i}. {prereq}")
 
-            print(f"\n🔗 Related Concepts:")
+            print("\n🔗 Related Concepts:")
             for i, concept in enumerate(explanation["related_concepts"], 1):
                 print(f"  {i}. {concept}")
 

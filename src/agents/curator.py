@@ -26,12 +26,11 @@ Example:
     top_5 = scored_papers[:5]  # Get top 5 papers
 """
 
-from typing import List, Dict, Any, Optional
 from loguru import logger
 
-from src.models.paper import Paper
-from src.config import settings, get_research_interests_list
+from src.config import get_research_interests_list, settings
 from src.database import get_db_session
+from src.models.paper import Paper
 
 
 class CuratorAgent:
@@ -46,7 +45,7 @@ class CuratorAgent:
     - User reading history
     """
 
-    def __init__(self, interests: Optional[List[str]] = None):
+    def __init__(self, interests: list[str] | None = None):
         """
         Initialize the Curator agent.
 
@@ -105,7 +104,7 @@ class CuratorAgent:
 
         return score
 
-    def score_papers(self, papers: List[Paper]) -> List[Paper]:
+    def score_papers(self, papers: list[Paper]) -> list[Paper]:
         """
         Score all papers and sort by relevance.
 
@@ -154,7 +153,7 @@ class CuratorAgent:
 
         return scored_papers
 
-    def save_scores(self, papers: List[Paper]) -> int:
+    def save_scores(self, papers: list[Paper]) -> int:
         """
         Save relevance scores to the database.
 
@@ -192,7 +191,7 @@ class CuratorAgent:
         logger.info(f"✅ Saved scores for {count} papers")
         return count
 
-    def score_and_save(self, papers: List[Paper]) -> List[Paper]:
+    def score_and_save(self, papers: list[Paper]) -> list[Paper]:
         """
         Score papers and save to database.
 
@@ -222,9 +221,7 @@ class CuratorAgent:
 
         return scored_papers
 
-    def select_top_papers(
-        self, papers: List[Paper], n: Optional[int] = None
-    ) -> List[Paper]:
+    def select_top_papers(self, papers: list[Paper], n: int | None = None) -> list[Paper]:
         """
         Select top N papers by relevance.
 
@@ -258,9 +255,7 @@ class CuratorAgent:
 # ============================================================================
 
 
-def curate_papers_batch(
-    papers: List[Paper], top_n: Optional[int] = None
-) -> List[Paper]:
+def curate_papers_batch(papers: list[Paper], top_n: int | None = None) -> list[Paper]:
     """
     Score and select top papers.
 

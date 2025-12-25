@@ -5,16 +5,18 @@ Simplified integration tests focusing on workflow orchestration.
 Complex database integration testing is covered by unit tests.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
+
+import pytest
+
+from src.database import init_db
 from src.graph import (
-    run_full_pipeline,
     run_analysis_pipeline,
     run_discovery_only_pipeline,
+    run_full_pipeline,
 )
 from src.models.paper import Paper
-from src.database import init_db
 
 
 @pytest.fixture(scope="function")
@@ -30,9 +32,7 @@ class TestWorkflowOrchestration:
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
     @patch("src.graph.explain_papers_batch")
-    def test_full_pipeline_orchestration(
-        self, mock_explain, mock_analyze, mock_discover
-    ):
+    def test_full_pipeline_orchestration(self, mock_explain, mock_analyze, mock_discover):
         """Test that full pipeline correctly orchestrates all agents."""
         # Create simple mock papers (not Mock objects, but simple dicts)
         mock_papers = [
@@ -52,13 +52,13 @@ class TestWorkflowOrchestration:
         analyzed = mock_papers.copy()
         for p in analyzed:
             p.main_claim = "Test claim"
-            p.analyzed_at = datetime.now(timezone.utc)
+            p.analyzed_at = datetime.now(UTC)
         mock_analyze.return_value = analyzed
 
         explained = analyzed.copy()
         for p in explained:
             p.eli5_summary = "Simple explanation"
-            p.explained_at = datetime.now(timezone.utc)
+            p.explained_at = datetime.now(UTC)
         mock_explain.return_value = explained
 
         result = run_full_pipeline(days_back=1, max_papers=2)
@@ -98,7 +98,7 @@ class TestWorkflowOrchestration:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
@@ -113,13 +113,13 @@ class TestWorkflowOrchestration:
         analyzed = papers.copy()
         for p in analyzed:
             p.main_claim = "Claim"
-            p.analyzed_at = datetime.now(timezone.utc)
+            p.analyzed_at = datetime.now(UTC)
         mock_analyze.return_value = analyzed
 
         explained = analyzed.copy()
         for p in explained:
             p.eli5_summary = "Summary"
-            p.explained_at = datetime.now(timezone.utc)
+            p.explained_at = datetime.now(UTC)
         mock_explain.return_value = explained
 
         result = run_analysis_pipeline()
@@ -144,9 +144,7 @@ class TestErrorHandling:
 
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
-    def test_pipeline_continues_after_analysis_failure(
-        self, mock_analyze, mock_discover
-    ):
+    def test_pipeline_continues_after_analysis_failure(self, mock_analyze, mock_discover):
         """Test that pipeline continues after partial failures."""
         mock_papers = [Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(2)]
         mock_discover.return_value = mock_papers

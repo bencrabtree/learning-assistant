@@ -22,14 +22,14 @@ Example:
     # Returns papers from the last 24 hours
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Optional
+from datetime import UTC, datetime, timedelta
+
 import arxiv
 from loguru import logger
 
-from src.config import settings, get_arxiv_categories_list
-from src.models.paper import Paper
+from src.config import get_arxiv_categories_list, settings
 from src.database import get_db_session
+from src.models.paper import Paper
 
 
 class DiscoveryAgent:
@@ -45,7 +45,7 @@ class DiscoveryAgent:
     Follows the same class-based pattern as ReaderAgent, ExplainerAgent, and CuratorAgent.
     """
 
-    def __init__(self, categories: Optional[List[str]] = None, max_results: int = 1000):
+    def __init__(self, categories: list[str] | None = None, max_results: int = 1000):
         """
         Initialize the Discovery agent.
 
@@ -84,7 +84,7 @@ class DiscoveryAgent:
         logger.debug(f"Built arXiv query: {query}")
         return query
 
-    def fetch_papers(self, days_back: int = 1) -> List[Dict]:
+    def fetch_papers(self, days_back: int = 1) -> list[dict]:
         """
         Fetch papers from arXiv API.
 
@@ -113,7 +113,7 @@ class DiscoveryAgent:
         # Calculate date cutoff
         # We only want papers published after this date
         # Use timezone-aware datetime (UTC) to match arXiv API results
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_back)
         logger.debug(f"Cutoff date: {cutoff_date}")
 
         # Build query
@@ -139,9 +139,7 @@ class DiscoveryAgent:
                 # result.published is a datetime object
                 if result.published < cutoff_date:
                     # Papers are sorted by date, so we can stop here
-                    logger.debug(
-                        f"Reached papers older than cutoff ({result.published}), stopping"
-                    )
+                    logger.debug(f"Reached papers older than cutoff ({result.published}), stopping")
                     break
 
                 # Extract metadata
@@ -169,7 +167,7 @@ class DiscoveryAgent:
             logger.error(f"❌ ArXiv API call failed: {e}")
             raise
 
-    def save_papers(self, papers: List[Dict]) -> int:
+    def save_papers(self, papers: list[dict]) -> int:
         """
         Save papers to the database.
 
@@ -226,7 +224,7 @@ class DiscoveryAgent:
         logger.info(f"✅ Saved {new_papers_count} new papers to database")
         return new_papers_count
 
-    def discover_papers(self, days_back: Optional[int] = None) -> List[Paper]:
+    def discover_papers(self, days_back: int | None = None) -> list[Paper]:
         """
         Main entry point for paper discovery.
 
@@ -279,9 +277,7 @@ class DiscoveryAgent:
                 arxiv_ids = [p["arxiv_id"] for p in paper_dicts]
                 papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
 
-            logger.info(
-                f"✅ Discovery complete! Found {len(papers)} papers ({num_saved} new)"
-            )
+            logger.info(f"✅ Discovery complete! Found {len(papers)} papers ({num_saved} new)")
             return papers
 
         except Exception as e:
@@ -295,9 +291,9 @@ class DiscoveryAgent:
 
 
 def discover_papers(
-    days_back: Optional[int] = None,
-    categories: Optional[List[str]] = None,
-) -> List[Paper]:
+    days_back: int | None = None,
+    categories: list[str] | None = None,
+) -> list[Paper]:
     """
     Main entry point for paper discovery.
 
@@ -334,7 +330,7 @@ def discover_papers(
 # These are wrappers around DiscoveryAgent methods
 
 
-def build_arxiv_query(categories: List[str], days_back: int = 1) -> str:
+def build_arxiv_query(categories: list[str], days_back: int = 1) -> str:
     """
     Build an arXiv API query string.
 
@@ -346,8 +342,8 @@ def build_arxiv_query(categories: List[str], days_back: int = 1) -> str:
 
 
 def fetch_papers_from_arxiv(
-    categories: List[str], days_back: int = 1, max_results: int = 1000
-) -> List[Dict]:
+    categories: list[str], days_back: int = 1, max_results: int = 1000
+) -> list[dict]:
     """
     Fetch papers from arXiv API.
 
@@ -358,7 +354,7 @@ def fetch_papers_from_arxiv(
     return agent.fetch_papers(days_back=days_back)
 
 
-def save_papers_to_db(papers: List[Dict]) -> int:
+def save_papers_to_db(papers: list[dict]) -> int:
     """
     Save papers to the database.
 
