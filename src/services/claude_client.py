@@ -92,15 +92,22 @@ class ClaudeClient:
             # [{"role": "user", "content": "..."}]
             messages = [{"role": "user", "content": prompt}]
 
-            # Make the API call
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system if system else None,
-                messages=messages,
+            # Build API call parameters
+            api_params = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": messages,
                 **kwargs,
-            )
+            }
+
+            # Add system parameter if provided
+            # Anthropic API requires: [{"type": "text", "text": "..."}]
+            if system:
+                api_params["system"] = [{"type": "text", "text": system}]
+
+            # Make the API call
+            response = self.client.messages.create(**api_params)
 
             # Extract the text from the response
             # Claude returns a Message object with content blocks
