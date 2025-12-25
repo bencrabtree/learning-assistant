@@ -31,13 +31,14 @@ Example:
     # analysis contains structured data about the paper
 """
 
-from typing import Dict, Any, List
+from typing import Any
+
 from loguru import logger
 
-from src.models.paper import Paper
-from src.services.claude_client import get_claude_client
 from src.config import settings
 from src.database import get_db_session
+from src.models.paper import Paper
+from src.services.claude_client import get_claude_client
 
 
 class ReaderAgent:
@@ -123,7 +124,7 @@ IMPORTANT:
 
         return prompt
 
-    def analyze_paper(self, paper: Paper) -> Dict[str, Any]:
+    def analyze_paper(self, paper: Paper) -> dict[str, Any]:
         """
         Analyze a single paper with Claude.
 
@@ -191,7 +192,7 @@ IMPORTANT:
             logger.error(f"❌ Failed to analyze paper {paper.arxiv_id}: {e}")
             raise
 
-    def analyze_papers(self, papers: List[Paper]) -> List[Dict[str, Any]]:
+    def analyze_papers(self, papers: list[Paper]) -> list[dict[str, Any]]:
         """
         Analyze multiple papers.
 
@@ -235,7 +236,7 @@ IMPORTANT:
         logger.info(f"✅ Analyzed {len(results)} papers ({failed} failed)")
         return results
 
-    def save_analysis(self, arxiv_id: str, analysis: Dict[str, Any]) -> None:
+    def save_analysis(self, arxiv_id: str, analysis: dict[str, Any]) -> None:
         """
         Save analysis results to the database.
 
@@ -274,7 +275,7 @@ IMPORTANT:
             # Commit happens automatically when we exit the with block
             logger.debug(f"✅ Saved analysis for {arxiv_id}")
 
-    def analyze_and_save(self, papers: List[Paper]) -> int:
+    def analyze_and_save(self, papers: list[Paper]) -> int:
         """
         Analyze papers and save results to database.
 
@@ -324,7 +325,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def analyze_papers_batch(papers: List[Paper]) -> List[Paper]:
+def analyze_papers_batch(papers: list[Paper]) -> list[Paper]:
     """
     Batch analyze papers and return updated Paper objects.
 
@@ -386,7 +387,7 @@ if __name__ == "__main__":
             print("=" * 80)
             print(f"\nMain Claim:\n{analysis['main_claim']}")
             print(f"\nMethodology:\n{analysis['methodology']}")
-            print(f"\nKey Results:")
+            print("\nKey Results:")
             for i, result in enumerate(analysis["key_results"], 1):
                 print(f"  {i}. {result}")
             print(f"\nNovel Contributions:\n{analysis['novel_contributions']}")

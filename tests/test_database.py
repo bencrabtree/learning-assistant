@@ -4,8 +4,10 @@ Unit tests for Database operations.
 Tests database connection, session management, and model operations.
 """
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
+
 from src.models.paper import Paper
 
 
@@ -31,7 +33,7 @@ class TestDatabaseSession:
                 title="Test Commit",
                 abstract="Testing auto-commit",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
@@ -57,11 +59,7 @@ class TestPaperModel:
 
         # Verify it was saved
         with db_session() as db:
-            found = (
-                db.query(Paper)
-                .filter_by(arxiv_id=sample_paper_data["arxiv_id"])
-                .first()
-            )
+            found = db.query(Paper).filter_by(arxiv_id=sample_paper_data["arxiv_id"]).first()
             assert found is not None
             assert found.title == sample_paper_data["title"]
 
@@ -74,10 +72,9 @@ class TestPaperModel:
             db.add(paper)
 
         # Try to add duplicate (should fail)
-        with pytest.raises(IntegrityError):
-            with db_session() as db:
-                duplicate = Paper(**sample_paper_data)
-                db.add(duplicate)
+        with pytest.raises(IntegrityError), db_session() as db:
+            duplicate = Paper(**sample_paper_data)
+            db.add(duplicate)
 
     def test_paper_timestamps(self, db_session):
         """Test that discovered_at timestamp is set automatically."""
@@ -87,7 +84,7 @@ class TestPaperModel:
                 title="Timestamp Test",
                 abstract="Testing timestamps",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
@@ -108,11 +105,7 @@ class TestPaperModel:
             db.add(paper)
 
         with db_session() as db:
-            found = (
-                db.query(Paper)
-                .filter_by(arxiv_id=sample_paper_data["arxiv_id"])
-                .first()
-            )
+            found = db.query(Paper).filter_by(arxiv_id=sample_paper_data["arxiv_id"]).first()
             # Analysis fields should be None for new papers
             assert found.main_claim is None
             assert found.methodology is None
@@ -127,22 +120,14 @@ class TestPaperModel:
 
         # Update with analysis
         with db_session() as db:
-            paper = (
-                db.query(Paper)
-                .filter_by(arxiv_id=sample_paper_data["arxiv_id"])
-                .first()
-            )
+            paper = db.query(Paper).filter_by(arxiv_id=sample_paper_data["arxiv_id"]).first()
             paper.main_claim = "This is the main claim"
             paper.methodology = "They used transformers"
-            paper.analyzed_at = datetime.now(timezone.utc)
+            paper.analyzed_at = datetime.now(UTC)
 
         # Verify update
         with db_session() as db:
-            paper = (
-                db.query(Paper)
-                .filter_by(arxiv_id=sample_paper_data["arxiv_id"])
-                .first()
-            )
+            paper = db.query(Paper).filter_by(arxiv_id=sample_paper_data["arxiv_id"]).first()
             assert paper.main_claim == "This is the main claim"
             assert paper.methodology == "They used transformers"
             assert paper.analyzed_at is not None
@@ -160,20 +145,20 @@ class TestDatabaseQueries:
                 title="Analyzed",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
                 discovered_by="test",
             )
-            analyzed.analyzed_at = datetime.now(timezone.utc)
+            analyzed.analyzed_at = datetime.now(UTC)
 
             unanalyzed = Paper(
                 arxiv_id="unanalyzed.123",
                 title="Unanalyzed",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf2",
                 abstract_url="http://example.com/abs2",
@@ -185,9 +170,7 @@ class TestDatabaseQueries:
 
         # Query unanalyzed
         with db_session() as db:
-            unanalyzed_papers = (
-                db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
-            )
+            unanalyzed_papers = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
             assert len(unanalyzed_papers) == 1
             assert unanalyzed_papers[0].arxiv_id == "unanalyzed.123"
 
@@ -201,7 +184,7 @@ class TestDatabaseQueries:
                     title=f"AI Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",

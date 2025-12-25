@@ -19,21 +19,21 @@ Example usage:
 
 import argparse
 import sys
+
 from loguru import logger
 
-from src.config import settings, get_logs_dir
+from src.config import get_logs_dir, settings
 from src.database import (
-    init_db,
     check_database_connection,
-    get_database_stats,
     drop_all_tables,
+    get_database_stats,
+    init_db,
 )
 from src.graph import (
-    run_full_pipeline,
     run_analysis_pipeline,
     run_discovery_only_pipeline,
+    run_full_pipeline,
 )
-
 
 # ============================================================================
 # Logging Setup
@@ -322,9 +322,7 @@ Examples:
     )
 
     # Database commands
-    parser.add_argument(
-        "--init-db", action="store_true", help="Initialize database schema"
-    )
+    parser.add_argument("--init-db", action="store_true", help="Initialize database schema")
 
     parser.add_argument(
         "--reset",
@@ -332,14 +330,10 @@ Examples:
         help="Reset database (WARNING: deletes all data)",
     )
 
-    parser.add_argument(
-        "--yes", "-y", action="store_true", help="Skip confirmation prompts"
-    )
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts")
 
     # Discovery commands
-    parser.add_argument(
-        "--discover", action="store_true", help="Discover new papers from arXiv"
-    )
+    parser.add_argument("--discover", action="store_true", help="Discover new papers from arXiv")
 
     parser.add_argument(
         "--days", type=int, default=1, help="How many days back to search (default: 1)"
@@ -353,14 +347,10 @@ Examples:
     )
 
     # Analysis commands
-    parser.add_argument(
-        "--analyze", action="store_true", help="Analyze papers with Claude"
-    )
+    parser.add_argument("--analyze", action="store_true", help="Analyze papers with Claude")
 
     # Digest commands
-    parser.add_argument(
-        "--digest", action="store_true", help="Generate and send email digest"
-    )
+    parser.add_argument("--digest", action="store_true", help="Generate and send email digest")
 
     # Stats commands
     parser.add_argument("--stats", action="store_true", help="Show database statistics")

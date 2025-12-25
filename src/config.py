@@ -11,9 +11,9 @@ Key Concepts:
 """
 
 from pathlib import Path
-from typing import Optional
-from pydantic_settings import BaseSettings
+
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -44,13 +44,13 @@ class Settings(BaseSettings):
     # Optional API Keys - These enable additional features
     # ============================================================================
 
-    twitter_bearer_token: Optional[str] = Field(
+    twitter_bearer_token: str | None = Field(
         default=None,
         alias="TWITTER_BEARER_TOKEN",
         description="Twitter API v2 bearer token (optional, for social signals)",
     )
 
-    semantic_scholar_api_key: Optional[str] = Field(
+    semantic_scholar_api_key: str | None = Field(
         default=None,
         alias="SEMANTIC_SCHOLAR_API_KEY",
         description="Semantic Scholar API key (optional, increases rate limits)",
@@ -70,29 +70,29 @@ class Settings(BaseSettings):
         description="SMTP server port (587 for TLS, 465 for SSL)",
     )
 
-    smtp_username: Optional[str] = Field(
+    smtp_username: str | None = Field(
         default=None, alias="SMTP_USERNAME", description="Email address to send from"
     )
 
-    smtp_password: Optional[str] = Field(
+    smtp_password: str | None = Field(
         default=None,
         alias="SMTP_PASSWORD",
         description="Email password or app-specific password",
     )
 
-    email_recipient: Optional[str] = Field(
+    email_recipient: str | None = Field(
         default=None,
         alias="EMAIL_RECIPIENT",
         description="Email address to send digests to",
     )
 
-    recipient_email: Optional[str] = Field(
+    recipient_email: str | None = Field(
         default=None,
         alias="RECIPIENT_EMAIL",
         description="Email address to send digests to (alternative field name)",
     )
 
-    lab_twitter_accounts: Optional[str] = Field(
+    lab_twitter_accounts: str | None = Field(
         default=None,
         alias="LAB_TWITTER_ACCOUNTS",
         description="Comma-separated list of Twitter accounts to track",

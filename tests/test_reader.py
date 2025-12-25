@@ -4,9 +4,11 @@ Comprehensive Unit Tests for Reader Agent - FINAL VERSION
 Properly mocked with working database session isolation.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
+
+import pytest
+
 from src.agents.reader import ReaderAgent, analyze_papers_batch
 from src.models.paper import Paper
 
@@ -20,7 +22,7 @@ def sample_paper(db_session):
             title="Multi-Agent Coordination with LLMs",
             abstract="This paper presents a novel approach to multi-agent systems.",
             authors=["Alice Smith", "Bob Jones", "Carol Lee"],
-            published_date=datetime(2024, 12, 20, tzinfo=timezone.utc),
+            published_date=datetime(2024, 12, 20, tzinfo=UTC),
             categories=["cs.AI", "cs.LG"],
             pdf_url="http://arxiv.org/pdf/2312.12345",
             abstract_url="http://arxiv.org/abs/2312.12345",
@@ -71,7 +73,7 @@ class TestReaderAgent:
                 title="Test Paper",
                 abstract="Abstract",
                 authors=["A", "B", "C", "D", "E", "F"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
@@ -86,9 +88,7 @@ class TestReaderAgent:
             assert "A, B, C et al." in prompt
 
     @patch("src.agents.reader.get_claude_client")
-    def test_analyze_paper_success(
-        self, mock_get_client, sample_paper, mock_claude_analysis
-    ):
+    def test_analyze_paper_success(self, mock_get_client, sample_paper, mock_claude_analysis):
         """Test successful paper analysis."""
         mock_client = Mock()
         mock_client.chat_json.return_value = mock_claude_analysis
@@ -141,7 +141,7 @@ class TestReaderAgent:
                 title="Test",
                 abstract="Abstract",
                 authors=["Test"],
-                published_date=datetime.now(timezone.utc),
+                published_date=datetime.now(UTC),
                 categories=["cs.AI"],
                 pdf_url="http://example.com/pdf",
                 abstract_url="http://example.com/abs",
@@ -150,9 +150,7 @@ class TestReaderAgent:
             db.add(paper)
 
         # Patch get_db_session to return a function that calls db_session
-        with patch(
-            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
-        ):
+        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
             reader = ReaderAgent()
             reader.save_analysis("2312.save.test", mock_claude_analysis)
 
@@ -164,9 +162,7 @@ class TestReaderAgent:
 
     def test_save_analysis_paper_not_found(self, db_session, mock_claude_analysis):
         """Test error when paper doesn't exist."""
-        with patch(
-            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
-        ):
+        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
             reader = ReaderAgent()
             with pytest.raises(ValueError) as exc_info:
                 reader.save_analysis("nonexistent.123", mock_claude_analysis)
@@ -184,7 +180,7 @@ class TestReaderAgent:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
@@ -193,9 +189,7 @@ class TestReaderAgent:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(
-                    db.query(Paper).filter_by(arxiv_id=f"2312.batch.{i}").first()
-                )
+                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.batch.{i}").first())
 
         mock_analyze.return_value = {"main_claim": "Test"}
 
@@ -215,7 +209,7 @@ class TestReaderAgent:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
@@ -224,9 +218,7 @@ class TestReaderAgent:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(
-                    db.query(Paper).filter_by(arxiv_id=f"2312.error.{i}").first()
-                )
+                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.error.{i}").first())
 
         def side_effect(paper):
             if "error.1" in paper.arxiv_id:
@@ -236,9 +228,7 @@ class TestReaderAgent:
         mock_analyze.side_effect = side_effect
 
         # Mock get_db_session for save_analysis calls
-        with patch(
-            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
-        ):
+        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
             reader = ReaderAgent()
             count = reader.analyze_and_save(papers)
 
@@ -259,7 +249,7 @@ class TestAnalyzePapersBatch:
                     title=f"Paper {i}",
                     abstract="Abstract",
                     authors=["Test"],
-                    published_date=datetime.now(timezone.utc),
+                    published_date=datetime.now(UTC),
                     categories=["cs.AI"],
                     pdf_url=f"http://example.com/pdf{i}",
                     abstract_url=f"http://example.com/abs{i}",
@@ -268,15 +258,11 @@ class TestAnalyzePapersBatch:
                 db.add(paper)
 
             with db_session() as db:
-                papers.append(
-                    db.query(Paper).filter_by(arxiv_id=f"2312.function.{i}").first()
-                )
+                papers.append(db.query(Paper).filter_by(arxiv_id=f"2312.function.{i}").first())
 
         mock_analyze_and_save.return_value = 2
 
-        with patch(
-            "src.agents.reader.get_db_session", side_effect=lambda: db_session()
-        ):
+        with patch("src.agents.reader.get_db_session", side_effect=lambda: db_session()):
             result = analyze_papers_batch(papers)
 
         assert isinstance(result, list)

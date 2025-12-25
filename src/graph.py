@@ -34,17 +34,16 @@ Example usage:
     papers = result["explained_papers"]
 """
 
-from typing import TypedDict, List, Optional, Annotated
-from datetime import datetime
-from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+from langgraph.graph import END, StateGraph
 from loguru import logger
 
-from src.models.paper import Paper
-from src.database import get_db_session
 from src.agents.discovery import discover_papers
-from src.agents.reader import analyze_papers_batch
 from src.agents.explainer import explain_papers_batch
-
+from src.agents.reader import analyze_papers_batch
+from src.database import get_db_session
+from src.models.paper import Paper
 
 # ============================================================================
 # State Definition
@@ -80,43 +79,43 @@ class AgentState(TypedDict):
     # Input Fields - What the user provides
     # ========================================================================
 
-    days_back: Optional[int]
+    days_back: int | None
     """How many days back to search for papers (default: 1)"""
 
-    categories: Optional[List[str]]
+    categories: list[str] | None
     """Which arXiv categories to search (default: from config)"""
 
-    max_papers: Optional[int]
+    max_papers: int | None
     """Maximum number of papers to process (default: unlimited)"""
 
     # ========================================================================
     # Intermediate Fields - What agents produce
     # ========================================================================
 
-    discovered_papers: Optional[List[Paper]]
+    discovered_papers: list[Paper] | None
     """Papers found by Discovery agent"""
 
-    analyzed_papers: Optional[List[Paper]]
+    analyzed_papers: list[Paper] | None
     """Papers analyzed by Reader agent (with main_claim, methodology, etc.)"""
 
-    explained_papers: Optional[List[Paper]]
+    explained_papers: list[Paper] | None
     """Papers explained by Explainer agent (with eli5_summary, etc.)"""
 
     # ========================================================================
     # Output Fields - Final results
     # ========================================================================
 
-    final_papers: Optional[List[Paper]]
+    final_papers: list[Paper] | None
     """Final set of papers to include in digest (after scoring/filtering)"""
 
     # ========================================================================
     # Metadata Fields - Tracking and logging
     # ========================================================================
 
-    errors: Optional[List[str]]
+    errors: list[str] | None
     """List of errors encountered during execution"""
 
-    stats: Optional[dict]
+    stats: dict | None
     """Statistics about the run (counts, timing, costs)"""
 
 
@@ -186,7 +185,7 @@ def discovery_node(state: AgentState) -> AgentState:
         logger.error(f"❌ Discovery node failed: {e}")
         if "errors" not in state or state["errors"] is None:
             state["errors"] = []
-        state["errors"].append(f"Discovery error: {str(e)}")
+        state["errors"].append(f"Discovery error: {e!s}")
         # Set empty list so downstream nodes can handle gracefully
         state["discovered_papers"] = []
 
@@ -249,7 +248,7 @@ def reader_node(state: AgentState) -> AgentState:
         logger.error(f"❌ Reader node failed: {e}")
         if "errors" not in state or state["errors"] is None:
             state["errors"] = []
-        state["errors"].append(f"Reader error: {str(e)}")
+        state["errors"].append(f"Reader error: {e!s}")
         state["analyzed_papers"] = []
         if "stats" not in state or state["stats"] is None:
             state["stats"] = {}
@@ -317,7 +316,7 @@ def explainer_node(state: AgentState) -> AgentState:
         logger.error(f"❌ Explainer node failed: {e}")
         if "errors" not in state or state["errors"] is None:
             state["errors"] = []
-        state["errors"].append(f"Explainer error: {str(e)}")
+        state["errors"].append(f"Explainer error: {e!s}")
         state["explained_papers"] = []
         state["final_papers"] = []
 
@@ -390,8 +389,8 @@ def create_workflow() -> StateGraph:
 
 def run_full_pipeline(
     days_back: int = 1,
-    categories: Optional[List[str]] = None,
-    max_papers: Optional[int] = None,
+    categories: list[str] | None = None,
+    max_papers: int | None = None,
 ) -> AgentState:
     """
     Run the full paper discovery and analysis pipeline.
@@ -455,8 +454,8 @@ def run_full_pipeline(
 
 def run_discovery_only_pipeline(
     days_back: int = 1,
-    categories: Optional[List[str]] = None,
-    max_papers: Optional[int] = None,
+    categories: list[str] | None = None,
+    max_papers: int | None = None,
 ) -> AgentState:
     """
     Run discovery pipeline without analysis.
@@ -632,7 +631,7 @@ if __name__ == "__main__":
 
     errors = result.get("errors", [])
     if errors:
-        print(f"\n⚠️  Errors:")
+        print("\n⚠️  Errors:")
         for error in errors:
             print(f"  - {error}")
 

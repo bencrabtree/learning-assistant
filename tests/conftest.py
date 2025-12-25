@@ -4,14 +4,14 @@ Pytest configuration and shared fixtures.
 This file defines common test fixtures used across multiple test files.
 """
 
-import pytest
 import os
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from unittest.mock import Mock
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from contextlib import contextmanager
-
 
 # Set environment variables BEFORE any imports
 # This runs at module import time, before pytest fixture system
@@ -45,7 +45,7 @@ def test_session(test_engine):
 
     This session is bound to the test database, not the production one.
     """
-    TestSessionLocal = sessionmaker(
+    test_session_local = sessionmaker(
         bind=test_engine,
         autoflush=False,
         autocommit=False,
@@ -54,7 +54,7 @@ def test_session(test_engine):
 
     @contextmanager
     def _get_test_session():
-        session = TestSessionLocal()
+        session = test_session_local()
         try:
             yield session
             session.commit()
@@ -96,7 +96,7 @@ def mock_arxiv_result():
     author2.name = "Bob Jones"
     result.authors = [author1, author2]
 
-    result.published = datetime(2024, 12, 20, 10, 30, 0, tzinfo=timezone.utc)
+    result.published = datetime(2024, 12, 20, 10, 30, 0, tzinfo=UTC)
     result.categories = ["cs.AI", "cs.LG"]
     result.pdf_url = "http://arxiv.org/pdf/2312.12345v1"
     return result
@@ -110,7 +110,7 @@ def sample_paper_data():
         "title": "Test Paper",
         "abstract": "This is a test abstract",
         "authors": ["Alice Smith", "Bob Jones"],
-        "published_date": datetime(2024, 12, 20, tzinfo=timezone.utc),
+        "published_date": datetime(2024, 12, 20, tzinfo=UTC),
         "categories": ["cs.AI", "cs.LG"],
         "pdf_url": "http://arxiv.org/pdf/2312.12345",
         "abstract_url": "http://arxiv.org/abs/2312.12345",

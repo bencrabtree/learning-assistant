@@ -2,11 +2,66 @@
 
 Comprehensive testing setup for the ArXiv Learning Assistant.
 
+## Pre-PR Quality Checks
+
+**Before creating a PR**, run all quality checks locally to ensure CI/CD will pass:
+
+### One-Command Check
+
+```bash
+./scripts/check-pr.sh
+```
+
+This runs all checks that GitHub Actions will run:
+- ✅ Code formatting (Black)
+- ✅ Import sorting (isort)
+- ✅ Linting (Ruff)
+- ✅ Type checking (MyPy)
+- ✅ Security scan (Bandit)
+- ✅ Tests with >80% coverage
+
+### Individual Quality Checks
+
+**Format code:**
+```bash
+black --line-length=100 .
+```
+
+**Sort imports:**
+```bash
+isort --profile=black --line-length=100 .
+```
+
+**Fix linting issues:**
+```bash
+ruff check --fix --unsafe-fixes src/ tests/
+```
+
+**Run security scan:**
+```bash
+bandit -r src/ -c pyproject.toml
+```
+
+**Type check (warnings only, not blocking):**
+```bash
+mypy src/ --config-file=pyproject.toml
+```
+
+See the **Quick Reference** section below for more details.
+
+---
+
 ## Quick Start
 
 ```bash
 # Run all tests
 pytest
+
+# Run ONLY unit tests (with coverage)
+pytest -m "not integration" --cov=src --cov-report=term-missing
+
+# Run ONLY integration tests (no coverage)
+pytest -m integration
 
 # Run with verbose output
 pytest -v
@@ -14,6 +69,20 @@ pytest -v
 # Run specific test file
 pytest tests/test_discovery.py
 ```
+
+## Unit vs Integration Tests
+
+**Unit Tests:**
+- Test individual functions/classes in isolation
+- Fast execution (< 0.1s per test)
+- Required to have >80% code coverage
+- Run with: `pytest -m "not integration" --cov=src`
+
+**Integration Tests:**
+- Test how components work together
+- May be slower (external services, database operations)
+- Coverage NOT required (they test integration, not code paths)
+- Run with: `pytest -m integration`
 
 ## Environment Setup
 
@@ -332,9 +401,45 @@ No environment variables or database configuration needed!
 5. **Keep tests fast** - Mock external APIs, use in-memory database
 6. **Run tests before commit** - Ensure nothing breaks
 
+---
+
+## Quick Reference: Quality Checks
+
+| Task | Command |
+|------|---------|
+| **All checks** | `./scripts/check-pr.sh` |
+| **Format code** | `black --line-length=100 .` |
+| **Sort imports** | `isort --profile=black --line-length=100 .` |
+| **Fix linting** | `ruff check --fix --unsafe-fixes src/ tests/` |
+| **Type check** | `mypy src/ --config-file=pyproject.toml` |
+| **Security scan** | `bandit -r src/ -c pyproject.toml` |
+| **Run tests** | `pytest` |
+| **Test coverage** | `pytest --cov=src --cov-report=term-missing` |
+| **Coverage HTML** | `pytest --cov=src --cov-report=html && open htmlcov/index.html` |
+
+### Pre-commit Hooks
+
+Install hooks that run automatically on every commit:
+
+```bash
+pre-commit install
+```
+
+Run hooks manually on all files:
+
+```bash
+pre-commit run --all-files
+```
+
+---
+
 ## Resources
 
 - [Pytest Documentation](https://docs.pytest.org/)
 - [SQLAlchemy Testing](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html)
 - [Mocking with unittest.mock](https://docs.python.org/3/library/unittest.mock.html)
+- [Black](https://black.readthedocs.io/) - Code formatting
+- [Ruff](https://docs.astral.sh/ruff/) - Fast Python linter
+- [MyPy](https://mypy.readthedocs.io/) - Type checking
+- [Pre-commit](https://pre-commit.com/) - Git hooks framework
 - [CLAUDE.md](CLAUDE.md) - Testing principles (Section 4)

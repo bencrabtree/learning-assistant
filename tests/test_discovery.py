@@ -8,8 +8,10 @@ Tests the arXiv discovery functionality including:
 - Database saving
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
+
 from src.agents.discovery import DiscoveryAgent
 
 
@@ -37,16 +39,16 @@ class TestDiscoveryAgent:
 
         Fix: Use datetime.now(timezone.utc) for timezone-aware cutoff.
         """
-        agent = DiscoveryAgent()
+        DiscoveryAgent()
 
         # Fetch would calculate cutoff_date internally
         # We test that it's timezone-aware by checking the implementation
         days_back = 7
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_back)
 
         # Verify it has timezone info
         assert cutoff_date.tzinfo is not None
-        assert cutoff_date.tzinfo == timezone.utc
+        assert cutoff_date.tzinfo == UTC
 
     def test_arxiv_result_uses_summary_not_abstract(self, mock_arxiv_result):
         """
@@ -57,7 +59,7 @@ class TestDiscoveryAgent:
 
         Fix: Use result.summary when extracting paper data.
         """
-        agent = DiscoveryAgent()
+        DiscoveryAgent()
 
         # Simulate extracting data from arXiv result
         paper_data = {
@@ -83,8 +85,8 @@ class TestDiscoveryAgent:
 
         This would fail if cutoff was naive and result was aware.
         """
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
-        arxiv_date = datetime(2024, 12, 20, 10, 30, 0, tzinfo=timezone.utc)
+        cutoff_date = datetime.now(UTC) - timedelta(days=7)
+        arxiv_date = datetime(2024, 12, 20, 10, 30, 0, tzinfo=UTC)
 
         # This comparison should work without errors
         is_recent = arxiv_date >= cutoff_date
@@ -107,20 +109,18 @@ class TestDatetimeHandling:
         This is what was happening before the fix.
         """
         naive_dt = datetime.now()  # No timezone
-        aware_dt = datetime.now(timezone.utc)  # With timezone
+        aware_dt = datetime.now(UTC)  # With timezone
 
         # This would raise: TypeError: can't compare offset-naive and offset-aware datetimes
-        with pytest.raises(
-            TypeError, match="can't compare offset-naive and offset-aware"
-        ):
+        with pytest.raises(TypeError, match="can't compare offset-naive and offset-aware"):
             _ = naive_dt < aware_dt
 
     def test_aware_datetime_comparison_works(self):
         """
         Demonstrate the fix: comparing two aware datetimes works fine.
         """
-        aware_dt1 = datetime.now(timezone.utc)
-        aware_dt2 = datetime.now(timezone.utc) - timedelta(days=7)
+        aware_dt1 = datetime.now(UTC)
+        aware_dt2 = datetime.now(UTC) - timedelta(days=7)
 
         # This works fine
         assert aware_dt1 > aware_dt2
@@ -128,10 +128,10 @@ class TestDatetimeHandling:
     def test_cutoff_date_calculation(self):
         """Test that cutoff date is calculated correctly."""
         days_back = 7
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_back)
 
         # Should be ~7 days ago
-        expected_date = datetime.now(timezone.utc) - timedelta(days=7)
+        expected_date = datetime.now(UTC) - timedelta(days=7)
 
         # Allow 1 second tolerance for test execution time
         diff = abs((cutoff_date - expected_date).total_seconds())

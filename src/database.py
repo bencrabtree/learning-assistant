@@ -28,16 +28,16 @@ Why this pattern?
 - Context manager = ensures cleanup even if errors happen
 """
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
+
+from loguru import logger
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker, Session
-from loguru import logger
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.config import settings
 from src.models.paper import Base
-
 
 # ============================================================================
 # Database Engine - Connection to the database
@@ -49,9 +49,7 @@ engine = create_engine(
     settings.database_url,
     # SQLite-specific settings for better performance
     connect_args=(
-        {"check_same_thread": False}
-        if settings.database_url.startswith("sqlite")
-        else {}
+        {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
     ),
     # Log all SQL queries (useful for debugging, disable in production)
     echo=settings.log_level == "DEBUG",
@@ -307,7 +305,7 @@ def get_database_stats() -> dict:
         print(f"Papers: {stats['papers']}")
         print(f"Citations: {stats['citations']}")
     """
-    from src.models.paper import Paper, Citation, SocialSignal, ReadingProgress
+    from src.models.paper import Citation, Paper, ReadingProgress, SocialSignal
 
     stats = {}
 
@@ -319,15 +317,11 @@ def get_database_stats() -> dict:
             stats["reading_progress"] = db.query(ReadingProgress).count()
 
             # Additional useful stats
-            stats["analyzed_papers"] = (
-                db.query(Paper).filter(Paper.analyzed_at.isnot(None)).count()
-            )
+            stats["analyzed_papers"] = db.query(Paper).filter(Paper.analyzed_at.isnot(None)).count()
             stats["explained_papers"] = (
                 db.query(Paper).filter(Paper.explained_at.isnot(None)).count()
             )
-            stats["scored_papers"] = (
-                db.query(Paper).filter(Paper.scored_at.isnot(None)).count()
-            )
+            stats["scored_papers"] = db.query(Paper).filter(Paper.scored_at.isnot(None)).count()
 
         logger.info(f"Database stats: {stats}")
         return stats
@@ -350,7 +344,7 @@ if __name__ == "__main__":
 
         # Show stats
         stats = get_database_stats()
-        print(f"\nDatabase Statistics:")
+        print("\nDatabase Statistics:")
         for key, value in stats.items():
             print(f"  {key}: {value}")
     else:
