@@ -9,14 +9,15 @@ Tests the complete Reader Agent workflow including:
 - Error handling
 """
 
-import pytest
 from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.models.paper import Base, Paper
 from src.agents.reader import ReaderAgent, analyze_papers_batch
+from src.models.paper import Base, Paper
 
 
 @pytest.fixture
@@ -30,8 +31,8 @@ def engine():
 @pytest.fixture
 def session(engine):
     """Create a database session for testing."""
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
     yield session
     session.close()
 
@@ -254,9 +255,7 @@ class TestReaderAgent:
                 reader.save_analysis(sample_paper.arxiv_id, mock_claude_response)
 
         # Verify paper was updated
-        updated_paper = (
-            session.query(Paper).filter_by(arxiv_id=sample_paper.arxiv_id).first()
-        )
+        updated_paper = session.query(Paper).filter_by(arxiv_id=sample_paper.arxiv_id).first()
         assert updated_paper.main_claim == mock_claude_response["main_claim"]
         assert updated_paper.methodology == mock_claude_response["methodology"]
         assert len(updated_paper.key_results) == 3
@@ -266,9 +265,7 @@ class TestReaderAgent:
         """Test that save_analysis raises error for non-existent paper."""
         with patch("src.agents.reader.get_db_session") as mock_get_session:
             mock_session = Mock()
-            mock_session.query.return_value.filter_by.return_value.first.return_value = (
-                None
-            )
+            mock_session.query.return_value.filter_by.return_value.first.return_value = None
             mock_get_session.return_value.__enter__.return_value = mock_session
             mock_get_session.return_value.__exit__.return_value = None
 
