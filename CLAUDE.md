@@ -225,9 +225,32 @@ This template automatically populates when you create a PR on GitHub. Fill out A
 
 ### Step-by-Step PR Creation Process
 
-**1. Pre-Push Validation (CRITICAL)**
+**1. Rebase with Main (CRITICAL)**
 
-Before creating a PR, **always** run the validation script:
+Before creating a PR, **always** rebase your branch with the latest main:
+
+```bash
+# Fetch latest from remote
+git fetch origin
+
+# Rebase your branch onto main
+git rebase origin/main
+
+# If conflicts occur, resolve them:
+# 1. Fix conflicts in the files
+# 2. git add <resolved-files>
+# 3. git rebase --continue
+```
+
+**Why rebase?**
+- Ensures your changes work with the latest code
+- Catches merge conflicts early (easier to fix locally)
+- Keeps git history clean and linear
+- Prevents CI/CD failures due to outdated dependencies
+
+**2. Pre-Push Validation (CRITICAL)**
+
+After rebasing, **always** run the validation script:
 
 ```bash
 ./scripts/validate-ci.sh
@@ -244,7 +267,7 @@ This ensures:
 
 **If any check fails, fix it before pushing.** This saves CI/CD time and tokens.
 
-**2. Commit Your Changes**
+**3. Commit Your Changes**
 
 ```bash
 # Stage all changes
@@ -262,7 +285,7 @@ git commit -m "feat: Add email digest functionality
 git log -1
 ```
 
-**3. Push to Remote**
+**4. Push to Remote**
 
 ```bash
 # Push with upstream tracking
@@ -272,7 +295,7 @@ git push -u origin your-branch-name
 git push -u origin feat/email-digest
 ```
 
-**4. Create Pull Request**
+**5. Create Pull Request**
 
 GitHub will show a URL after pushing:
 ```
@@ -285,7 +308,7 @@ Visit that URL or use GitHub CLI:
 gh pr create --title "Your PR Title" --body "PR description here"
 ```
 
-**5. Fill Out PR Description**
+**6. Fill Out PR Description**
 
 Use the template and fill in ALL sections:
 
@@ -311,7 +334,7 @@ Use the template and fill in ALL sections:
 - [ ] Tests
 ```
 
-**6. Request Review (if applicable)**
+**7. Request Review (if applicable)**
 
 - Assign reviewers if working with a team
 - Link related issues with `Fixes #123` or `Relates to #456`
@@ -321,6 +344,8 @@ Use the template and fill in ALL sections:
 
 Before requesting review, verify:
 
+- [ ] Branch is rebased with latest main
+- [ ] `./scripts/validate-ci.sh` passed locally
 - [ ] PR title is clear and descriptive
 - [ ] All sections of template are filled out
 - [ ] Changes are focused (one feature/fix per PR)
@@ -333,6 +358,7 @@ Before requesting review, verify:
 ### Common PR Mistakes to Avoid
 
 ❌ **Don't:**
+- Create PR without rebasing with main first
 - Create PR without running `validate-ci.sh` first
 - Leave template sections blank or with placeholder text
 - Mix unrelated changes in one PR
@@ -341,6 +367,7 @@ Before requesting review, verify:
 - Include secrets in commit history
 
 ✅ **Do:**
+- Rebase with main before creating PR
 - Run validation before every push
 - Write descriptive commit messages
 - Keep PRs focused and atomic
