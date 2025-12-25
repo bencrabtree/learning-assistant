@@ -58,53 +58,11 @@ bandit -r src/ -c pyproject.toml
 mypy src/ --config-file=pyproject.toml
 ```
 
-### Common Lint Issues & Quick Fixes
+### 💡 Pro Tip
 
-**1. Variable naming (N806): `Session` should be lowercase**
+**Always run `./scripts/validate-ci.sh` before pushing!**
 
-```python
-# ❌ Wrong - violates PEP8
-Session = sessionmaker(bind=engine)
-session = Session()
-
-# ✅ Correct - factory is lowercase
-session_factory = sessionmaker(bind=engine)
-session = session_factory()
-```
-
-**2. Type hints (UP045): Use modern syntax**
-
-```python
-# ❌ Wrong - old Optional syntax
-from typing import Optional
-foo: Mapped[Optional[str]] = mapped_column(...)
-
-# ✅ Correct - Python 3.10+ syntax
-foo: Mapped[str | None] = mapped_column(...)
-```
-
-**3. Unused imports (F401)**
-
-```bash
-# Auto-fix with Ruff
-ruff check --fix src/ tests/
-```
-
-**4. Import sorting**
-
-```bash
-# Auto-fix with isort
-isort --profile=black --line-length=100 .
-```
-
-**5. Formatting**
-
-```bash
-# Auto-fix with Black
-black --line-length=100 .
-```
-
-See the **Quick Reference** section below for more details.
+This catches all lint issues, formatting problems, and test failures locally - saving you from failed CI/CD runs and wasted time.
 
 ---
 
