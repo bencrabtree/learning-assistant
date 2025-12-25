@@ -45,7 +45,7 @@ def test_session(test_engine):
 
     This session is bound to the test database, not the production one.
     """
-    test_session_local = sessionmaker(  # noqa: N806
+    test_session_local = sessionmaker(
         bind=test_engine,
         autoflush=False,
         autocommit=False,
