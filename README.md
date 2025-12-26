@@ -74,6 +74,224 @@ This project builds an autonomous **multi-agent system** using:
 
 ---
 
+## Quick Start
+
+### Prerequisites
+- Python 3.11+
+- Anthropic API key (for Claude)
+- Optional: Twitter API key, Semantic Scholar API key
+
+### Setup
+
+```bash
+# 1. Clone and create virtual environment
+git clone https://github.com/yourusername/learning-assistant
+cd learning-assistant
+python -m venv venv
+source venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 4. Initialize database
+python main.py --init-db
+
+# 5. Test the setup
+python main.py --discover --days 1
+```
+
+### Basic Usage
+
+```bash
+# 1. Run the core workflow - discover and analyze papers
+python main.py --discover --days 1 --analyze --max-papers 5
+
+# 2. Explore interactively (RECOMMENDED!)
+python main.py --explore
+```
+
+That's it! The `--explore` command gives you a rich interactive interface to browse, read, and manage all your papers.
+
+### Interactive Explorer (`--explore`) - Recommended
+
+The `--explore` command launches a **rich Text User Interface (TUI)** for browsing and interacting with your analyzed papers. This is the best way to review your workflow results.
+
+**Main Features:**
+- 📊 **Interactive table** - Browse all papers with arrow keys
+- 🔍 **Full paper details** - Press Enter to view complete analysis and explanation
+- 📖 **Reading tracker** - Mark papers as unread/reading/finished
+- 💾 **Export to JSON** - Save papers for further processing
+- 🗑️ **Delete papers** - Remove papers you don't need
+- 🎨 **Visual status** - See at a glance what's analyzed, explained, and read
+
+**Keyboard Shortcuts:**
+
+*In the paper list:*
+- `↑/↓` - Navigate papers
+- `Enter` - View paper details
+- `q` - Quit application
+
+*In paper detail view:*
+- `Esc` or `q` - Back to list
+- `e` - Export current paper to JSON file (saved in `exports/` folder)
+- `r` - Toggle reading status (unread → reading → finished → unread)
+- `d` - Delete paper from database
+
+**Status Indicators:**
+
+*Reading Status:*
+- `○` - Unread
+- `◐` - Reading
+- `●` - Finished
+
+*Processing Status:*
+- `✓✓` - Analyzed + Explained (complete)
+- `✓` - Analyzed only
+- `-` - Not processed yet
+
+**Example Workflow:**
+```bash
+# 1. Run discovery and analysis
+python main.py --discover --days 3 --analyze --max-papers 10
+
+# 2. Launch explorer to review results
+python main.py --explore
+
+# 3. Browse with ↑/↓, press Enter on interesting papers
+# 4. Mark papers you've read with 'r'
+# 5. Export important papers with 'e'
+# 6. Delete irrelevant papers with 'd'
+```
+
+**Exported Files:**
+- Location: `exports/<arxiv_id>_<timestamp>.json`
+- Contains: Full metadata, abstract, analysis, explanation, and reading status
+- Use for: Building your own tools, importing to notebooks, archiving
+
+---
+
+### Other Commands
+
+**Discovery and Analysis:**
+```bash
+# Just discover papers (don't analyze yet)
+python main.py --discover --days 3
+
+# Analyze previously discovered papers
+python main.py --analyze
+```
+
+**View Current State (Non-Interactive):**
+```bash
+python main.py --stats                     # Database statistics
+python main.py --list                      # Recent papers (default: 10)
+python main.py --list --limit 20           # Show 20 recent papers
+python main.py --show 2512.18878v1         # View specific paper details
+```
+
+**Export Data as JSON:**
+```bash
+python main.py --list --format json                      # Export list as JSON
+python main.py --show 2512.18878v1 --format json         # Export paper as JSON
+```
+
+---
+
+## Technology Stack
+
+### Core Framework
+- **LangGraph 0.3+** - Multi-agent orchestration
+- **LangChain 0.1+** - LLM framework
+- **Claude API** - Paper analysis and explanation
+
+### Data & Storage
+- **SQLAlchemy 2.0+** - ORM for database operations
+- **SQLite** - Local database (easily upgradable to PostgreSQL)
+- **NetworkX** - Graph analysis
+
+### Discovery APIs
+- **arXiv** - Paper discovery
+- **Semantic Scholar** - Citation data
+- **Twitter API** - Social signals
+- **HackerNews Algolia** - Community signals
+
+### Visualization
+- **Streamlit** - Interactive dashboard
+- **PyVis** - Network graph rendering
+- **Plotly** - Charts and visualizations
+
+---
+
+## Project Structure
+
+```
+learning-assistant/
+├── main.py                 # CLI entry point
+├── CLAUDE.md              # Development guide (best practices, preferences)
+├── TESTING.md             # Testing guide
+├── README.md              # This file (project overview)
+│
+├── src/                   # Source code
+│   ├── models/            # Database models (SQLAlchemy ORM)
+│   ├── agents/            # LangGraph agents
+│   ├── services/          # External service clients
+│   ├── graph.py           # LangGraph workflow definitions
+│   ├── config.py          # Configuration management
+│   └── database.py        # Database connection
+│
+├── tests/                 # Test files (80%+ coverage)
+│   ├── conftest.py        # Shared fixtures
+│   └── agents/            # Agent-specific tests
+│
+├── docs/                  # Documentation
+│   ├── milestones/        # Milestone breakdowns (work backwards from goals)
+│   ├── design.md          # System architecture & design decisions
+│   ├── project_plan.md    # Original 6-week build plan
+│   └── langgraph_intro.md # LangGraph concepts and patterns
+│
+├── scripts/               # Utility scripts
+│   ├── validate-ci.sh     # Run all CI/CD checks locally
+│   └── check-pr.sh        # Quick pre-PR validation
+│
+└── data/                  # Database & cache (gitignored)
+    └── papers.db          # SQLite database
+```
+
+---
+
+## Learning Objectives
+
+This is a **learning project** focused on understanding:
+
+### LangGraph Patterns
+- Shared context management (state flowing through agents)
+- State evolution over time (tracking changes)
+- Checkpointing and persistence (resume workflows)
+- Audit trails and replay (debugging and transparency)
+
+### Multi-Agent Systems
+- Agent specialization (Reader, Explainer, Curator, etc.)
+- Parallel execution and state merging
+- Decision logging and observability
+- Error handling and retry logic
+
+### Production Patterns
+- Testing strategies (unit, integration, E2E with 80%+ coverage)
+- Performance optimization (caching, batching, parallel execution)
+- Monitoring and alerting
+- Automated workflows (scheduled jobs)
+
+**For deep dives**, see:
+- [docs/langgraph_intro.md](docs/langgraph_intro.md) - LangGraph concepts explained
+- [docs/milestones/](docs/milestones/) - Detailed milestone breakdowns
+- [CLAUDE.md](CLAUDE.md) - Development best practices
+
+---
+
 ## Development Milestones
 
 The project is structured around **6 major milestones**, each delivering usable value. See [docs/milestones/](docs/milestones/) for detailed breakdowns.
@@ -172,162 +390,6 @@ The project is structured around **6 major milestones**, each delivering usable 
 - Production reliability (monitoring, error handling, testing)
 
 **Value:** Hands-off system that consolidates learning and delivers insights
-
----
-
-## Technology Stack
-
-### Core Framework
-- **LangGraph 0.3+** - Multi-agent orchestration
-- **LangChain 0.1+** - LLM framework
-- **Claude API** - Paper analysis and explanation
-
-### Data & Storage
-- **SQLAlchemy 2.0+** - ORM for database operations
-- **SQLite** - Local database (easily upgradable to PostgreSQL)
-- **NetworkX** - Graph analysis
-
-### Discovery APIs
-- **arXiv** - Paper discovery
-- **Semantic Scholar** - Citation data
-- **Twitter API** - Social signals
-- **HackerNews Algolia** - Community signals
-
-### Visualization
-- **Streamlit** - Interactive dashboard
-- **PyVis** - Network graph rendering
-- **Plotly** - Charts and visualizations
-
----
-
-## Quick Start
-
-### Prerequisites
-- Python 3.11+
-- Anthropic API key (for Claude)
-- Optional: Twitter API key, Semantic Scholar API key
-
-### Setup
-
-```bash
-# 1. Clone and create virtual environment
-git clone https://github.com/yourusername/learning-assistant
-cd learning-assistant
-python -m venv venv
-source venv/bin/activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
-
-# 4. Initialize database
-python main.py --init-db
-
-# 5. Test the setup
-python main.py --discover --days 1
-```
-
-### Basic Usage
-
-```bash
-# Discover papers from last 3 days
-python main.py --discover --days 3
-
-# View database stats
-python main.py --stats
-
-# Run full pipeline (discover + analyze + explain)
-python main.py --full-pipeline --days 1
-```
-
----
-
-## Project Structure
-
-```
-learning-assistant/
-├── main.py                 # CLI entry point
-├── CLAUDE.md              # Development guide (best practices, preferences)
-├── TESTING.md             # Testing guide
-├── README.md              # This file (project overview)
-│
-├── src/                   # Source code
-│   ├── models/            # Database models (SQLAlchemy ORM)
-│   ├── agents/            # LangGraph agents
-│   ├── services/          # External service clients
-│   ├── graph.py           # LangGraph workflow definitions
-│   ├── config.py          # Configuration management
-│   └── database.py        # Database connection
-│
-├── tests/                 # Test files (80%+ coverage)
-│   ├── conftest.py        # Shared fixtures
-│   └── agents/            # Agent-specific tests
-│
-├── docs/                  # Documentation
-│   ├── milestones/        # Milestone breakdowns (work backwards from goals)
-│   ├── design.md          # System architecture & design decisions
-│   ├── project_plan.md    # Original 6-week build plan
-│   └── langgraph_intro.md # LangGraph concepts and patterns
-│
-├── scripts/               # Utility scripts
-│   ├── validate-ci.sh     # Run all CI/CD checks locally
-│   └── check-pr.sh        # Quick pre-PR validation
-│
-└── data/                  # Database & cache (gitignored)
-    └── papers.db          # SQLite database
-```
-
----
-
-## Learning Objectives
-
-This is a **learning project** focused on understanding:
-
-### LangGraph Patterns
-- Shared context management (state flowing through agents)
-- State evolution over time (tracking changes)
-- Checkpointing and persistence (resume workflows)
-- Audit trails and replay (debugging and transparency)
-
-### Multi-Agent Systems
-- Agent specialization (Reader, Explainer, Curator, etc.)
-- Parallel execution and state merging
-- Decision logging and observability
-- Error handling and retry logic
-
-### Production Patterns
-- Testing strategies (unit, integration, E2E with 80%+ coverage)
-- Performance optimization (caching, batching, parallel execution)
-- Monitoring and alerting
-- Automated workflows (scheduled jobs)
-
-**For deep dives**, see:
-- [docs/langgraph_intro.md](docs/langgraph_intro.md) - LangGraph concepts explained
-- [docs/milestones/](docs/milestones/) - Detailed milestone breakdowns
-- [CLAUDE.md](CLAUDE.md) - Development best practices
-
----
-
-## Current Progress
-
-**✅ Completed:**
-- Testing infrastructure (pytest, coverage, linting, CI/CD)
-- Database schema with audit trails
-- Discovery agent (arXiv integration)
-- Reader Agent with comprehensive tests
-- Explainer Agent with comprehensive tests
-
-**🚧 In Progress:**
-- Social signal tracking (Twitter, HackerNews)
-- Citation integration (Semantic Scholar)
-
-**📋 Next Up:**
-- Citation velocity calculation
-- Knowledge graph construction
-- Progress tracking dashboard
 
 ---
 

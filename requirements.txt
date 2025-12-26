@@ -29,6 +29,7 @@ loguru>=0.7.0
 apscheduler>=3.10.0
 pydantic_settings
 rich>=13.7.0
+textual>=0.47.0
 
 # Testing & Quality
 pytest>=7.4.0
