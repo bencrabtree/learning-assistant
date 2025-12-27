@@ -11,10 +11,10 @@ Architecture:
 - src/agents/* = Business logic layer (individual agents)
 
 Example usage:
-    python main.py --init-db                    # Initialize database
-    python main.py --discover --days 1          # Find papers from last day
-    python main.py --digest                     # Generate and send email digest
-    python main.py --stats                      # Show database statistics
+    python main.py --init-db                         # Initialize database
+    python main.py --discover --days 1 --analyze     # Discover and analyze papers
+    python main.py --list                            # List recent papers
+    python main.py --stats                           # Show database statistics
 """
 
 import argparse
@@ -27,6 +27,7 @@ from src.database import (
     check_database_connection,
     drop_all_tables,
     get_database_stats,
+    get_db_session,
     init_db,
 )
 from src.graph import (
@@ -217,25 +218,239 @@ def handle_analyze(args):
         sys.exit(1)
 
 
-def handle_digest(args):
+def handle_list(args):
     """
-    Generate and send email digest.
+    List recent papers from the database.
 
-    This will:
-    1. Load papers from database
-    2. Score them for relevance
-    3. Select top N papers
-    4. Generate HTML email
-    5. Send via SMTP
+    Shows the most recently discovered or analyzed papers
+    to help understand what's currently in the system.
 
     Example:
-        python main.py --digest
+        python main.py --list
+        python main.py --list --limit 20
+        python main.py --list --format json
     """
-    logger.info("Generating email digest...")
+    logger.info("Listing recent papers...")
 
-    # TODO: Implement digest pipeline
-    # This will be built in Week 1, Day 4-5
-    logger.warning("Digest not yet implemented (coming in Day 4)")
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    # Get limit from args (default to 10)
+    limit = getattr(args, "limit", 10)
+    output_format = getattr(args, "format", "text")
+
+    with get_db_session() as db:
+        from src.models.paper import Paper
+
+        papers = db.query(Paper).order_by(Paper.discovered_at.desc()).limit(limit).all()
+
+        if not papers:
+            if output_format == "json":
+                import json
+
+                print(json.dumps({"papers": [], "total": 0}, indent=2))
+            else:
+                print("\nNo papers found in database.")
+                print("Run: python main.py --discover --days 1\n")
+            return
+
+        # JSON output
+        if output_format == "json":
+            import json
+
+            papers_data = []
+            for paper in papers:
+                papers_data.append(
+                    {
+                        "arxiv_id": paper.arxiv_id,
+                        "title": paper.title,
+                        "published_date": paper.published_date.isoformat(),
+                        "discovered_at": paper.discovered_at.isoformat(),
+                        "analyzed": paper.analyzed_at is not None,
+                        "analyzed_at": (
+                            paper.analyzed_at.isoformat() if paper.analyzed_at else None
+                        ),
+                        "explained": paper.explained_at is not None,
+                        "explained_at": (
+                            paper.explained_at.isoformat() if paper.explained_at else None
+                        ),
+                        "relevance_score": paper.relevance_score,
+                        "authors": paper.authors,
+                        "categories": paper.categories,
+                        "pdf_url": paper.pdf_url,
+                    }
+                )
+
+            output = {"papers": papers_data, "total": db.query(Paper).count(), "limit": limit}
+            print(json.dumps(output, indent=2))
+            return
+
+        # Text output
+        print("\n" + "=" * 80)
+        print(f"RECENT PAPERS (showing {len(papers)} of {db.query(Paper).count()} total)")
+        print("=" * 80)
+
+        for i, paper in enumerate(papers, 1):
+            status = []
+            if paper.analyzed_at:
+                status.append("✓ Analyzed")
+            if paper.explained_at:
+                status.append("✓ Explained")
+            if paper.scored_at:
+                status.append(f"✓ Scored ({paper.relevance_score:.2f})")
+
+            status_str = " | ".join(status) if status else "Not processed"
+
+            print(f"\n{i}. {paper.title}")
+            print(f"   ArXiv: {paper.arxiv_id} | Published: {paper.published_date.date()}")
+            print(f"   Status: {status_str}")
+
+        print("\n" + "=" * 80 + "\n")
+
+
+def handle_show(args):
+    """
+    Show detailed view of a specific paper including analysis and explanation.
+
+    Example:
+        python main.py --show 2512.18878v1
+        python main.py --show 2512.18878v1 --format json
+    """
+    arxiv_id = args.show
+    output_format = getattr(args, "format", "text")
+
+    logger.info(f"Fetching details for paper: {arxiv_id}")
+
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    with get_db_session() as db:
+        from src.models.paper import Paper
+
+        paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+
+        if not paper:
+            print(f"\nPaper not found: {arxiv_id}")
+            print("Run: python main.py --list\n")
+            sys.exit(1)
+
+        # JSON output
+        if output_format == "json":
+            import json
+
+            paper_data = {
+                "arxiv_id": paper.arxiv_id,
+                "title": paper.title,
+                "abstract": paper.abstract,
+                "authors": paper.authors,
+                "published_date": paper.published_date.isoformat(),
+                "categories": paper.categories,
+                "pdf_url": paper.pdf_url,
+                "abstract_url": paper.abstract_url,
+                "discovered_at": paper.discovered_at.isoformat(),
+                "analysis": (
+                    {
+                        "main_claim": paper.main_claim,
+                        "methodology": paper.methodology,
+                        "key_results": paper.key_results,
+                        "novel_contributions": paper.novel_contributions,
+                        "limitations": paper.limitations,
+                        "concepts": paper.concepts,
+                        "analyzed_at": (
+                            paper.analyzed_at.isoformat() if paper.analyzed_at else None
+                        ),
+                    }
+                    if paper.analyzed_at
+                    else None
+                ),
+                "explanation": (
+                    {
+                        "eli5_summary": paper.eli5_summary,
+                        "key_insight": paper.key_insight,
+                        "learning_questions": paper.learning_questions,
+                        "prerequisites": paper.prerequisites,
+                        "related_concepts": paper.related_concepts,
+                        "explained_at": (
+                            paper.explained_at.isoformat() if paper.explained_at else None
+                        ),
+                    }
+                    if paper.explained_at
+                    else None
+                ),
+                "relevance_score": paper.relevance_score,
+                "scored_at": paper.scored_at.isoformat() if paper.scored_at else None,
+            }
+
+            print(json.dumps(paper_data, indent=2))
+            return
+
+        # Text output
+        print("\n" + "=" * 100)
+        print(f"PAPER DETAILS: {paper.arxiv_id}")
+        print("=" * 100)
+
+        print(f"\nTitle: {paper.title}")
+        print(f"Authors: {paper.authors}")
+        print(f"Published: {paper.published_date.date()}")
+        print(f"Categories: {paper.categories}")
+        print(f"PDF: {paper.pdf_url}")
+        print(f"\nAbstract:\n{paper.abstract}")
+
+        if paper.analyzed_at:
+            print("\n" + "-" * 100)
+            print("ANALYSIS (by Claude Haiku)")
+            print("-" * 100)
+            print(f"\nMain Claim:\n{paper.main_claim}")
+            print(f"\nMethodology:\n{paper.methodology}")
+            print(f"\nKey Results:\n{paper.key_results}")
+            print(f"\nNovel Contributions:\n{paper.novel_contributions}")
+            print(f"\nLimitations:\n{paper.limitations}")
+            print(f"\nConcepts: {paper.concepts}")
+            print(f"\nAnalyzed at: {paper.analyzed_at}")
+
+        if paper.explained_at:
+            print("\n" + "-" * 100)
+            print("EXPLANATION (by Claude Sonnet)")
+            print("-" * 100)
+            print(f"\nELI5 Summary:\n{paper.eli5_summary}")
+            print(f"\nKey Insight:\n{paper.key_insight}")
+            print(f"\nLearning Questions:\n{paper.learning_questions}")
+            print(f"\nPrerequisites: {paper.prerequisites}")
+            print(f"\nRelated Concepts: {paper.related_concepts}")
+            print(f"\nExplained at: {paper.explained_at}")
+
+        if paper.relevance_score is not None:
+            print("\n" + "-" * 100)
+            print(f"Relevance Score: {paper.relevance_score:.2f} (scored at: {paper.scored_at})")
+
+        print("\n" + "=" * 100 + "\n")
+
+
+def handle_explore(args):
+    """
+    Launch interactive TUI for exploring papers.
+
+    Navigate with arrow keys, press Enter to view details,
+    and use keyboard shortcuts for actions.
+
+    Example:
+        python main.py --explore
+    """
+    logger.info("Launching paper explorer...")
+
+    from src.tui import run_paper_explorer
+
+    try:
+        run_paper_explorer()
+    except KeyboardInterrupt:
+        logger.info("Explorer closed by user")
+    except Exception as e:
+        logger.error(f"Explorer failed: {e}")
+        if settings.log_level == "DEBUG":
+            logger.exception("Full traceback:")
+        sys.exit(1)
 
 
 def handle_stats(args):
@@ -309,54 +524,92 @@ Examples:
   # First-time setup
   python main.py --init-db
 
-  # Daily workflow
-  python main.py --discover --days 1 --analyze
-  python main.py --digest
+  # Core workflow - discover and analyze papers
+  python main.py --discover --days 1 --analyze --max-papers 5
 
-  # Check status
-  python main.py --stats
+  # Just discover (don't analyze yet)
+  python main.py --discover --days 3
+
+  # Analyze previously discovered papers
+  python main.py --analyze
+
+  # View current state
+  python main.py --stats                           # Database statistics
+  python main.py --list                            # Recent papers (default: 10)
+  python main.py --list --limit 20                 # Show 20 recent papers
+  python main.py --show 2512.18878v1               # View detailed analysis of a paper
+
+  # Interactive exploration (recommended!)
+  python main.py --explore                         # Browse papers interactively with arrow keys
+
+  # Export data as JSON
+  python main.py --list --format json              # Export list as JSON
+  python main.py --show 2512.18878v1 --format json # Export paper details as JSON
 
   # Reset everything
-  python main.py --init-db --reset
+  python main.py --init-db --reset --yes
         """,
     )
 
-    # Database commands
-    parser.add_argument("--init-db", action="store_true", help="Initialize database schema")
+    # ==================== SETUP COMMANDS ====================
+    setup_group = parser.add_argument_group("Setup", "Database initialization and management")
+    setup_group.add_argument(
+        "--init-db", action="store_true", help="Initialize or update database schema"
+    )
+    setup_group.add_argument(
+        "--reset", action="store_true", help="Reset database (WARNING: deletes all data)"
+    )
+    setup_group.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts")
 
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Reset database (WARNING: deletes all data)",
+    # ==================== PIPELINE COMMANDS ====================
+    pipeline_group = parser.add_argument_group("Pipeline", "Run discovery and analysis workflows")
+    pipeline_group.add_argument(
+        "--discover", action="store_true", help="Discover new papers from arXiv"
+    )
+    pipeline_group.add_argument(
+        "--analyze", action="store_true", help="Analyze papers with Claude AI"
     )
 
-    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts")
-
-    # Discovery commands
-    parser.add_argument("--discover", action="store_true", help="Discover new papers from arXiv")
-
-    parser.add_argument(
+    # ==================== PIPELINE PARAMETERS ====================
+    params_group = parser.add_argument_group("Parameters", "Control pipeline behavior")
+    params_group.add_argument(
         "--days", type=int, default=1, help="How many days back to search (default: 1)"
     )
-
-    parser.add_argument(
+    params_group.add_argument(
         "--max-papers",
         type=int,
         default=None,
-        help="Maximum number of papers to process (for testing)",
+        help="Maximum papers to process per run (useful for testing)",
     )
 
-    # Analysis commands
-    parser.add_argument("--analyze", action="store_true", help="Analyze papers with Claude")
+    # ==================== REPORTING COMMANDS ====================
+    report_group = parser.add_argument_group("Reporting", "View current state and statistics")
+    report_group.add_argument("--stats", action="store_true", help="Show database statistics")
+    report_group.add_argument(
+        "--list", action="store_true", help="List recent papers from database"
+    )
+    report_group.add_argument(
+        "--show", type=str, metavar="ARXIV_ID", help="Show detailed view of a specific paper"
+    )
+    report_group.add_argument(
+        "--explore",
+        action="store_true",
+        help="Launch interactive TUI for browsing papers (arrow keys, Enter to view)",
+    )
+    report_group.add_argument(
+        "--limit", type=int, default=10, help="Number of papers to show with --list (default: 10)"
+    )
+    report_group.add_argument(
+        "--format",
+        type=str,
+        choices=["text", "json"],
+        default="text",
+        help="Output format for --list, --stats, or --show (default: text)",
+    )
 
-    # Digest commands
-    parser.add_argument("--digest", action="store_true", help="Generate and send email digest")
-
-    # Stats commands
-    parser.add_argument("--stats", action="store_true", help="Show database statistics")
-
-    # Logging
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    # ==================== OTHER OPTIONS ====================
+    other_group = parser.add_argument_group("Other")
+    other_group.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     # Parse arguments
     args = parser.parse_args()
@@ -379,8 +632,12 @@ Examples:
             handle_discover(args)
         elif args.analyze:
             handle_analyze(args)
-        elif args.digest:
-            handle_digest(args)
+        elif args.show:
+            handle_show(args)
+        elif args.explore:
+            handle_explore(args)
+        elif args.list:
+            handle_list(args)
         elif args.stats:
             handle_stats(args)
         else:

@@ -331,6 +331,109 @@ def get_database_stats() -> dict:
         return {}
 
 
+def delete_paper(arxiv_id: str) -> bool:
+    """
+    Delete a paper from the database.
+
+    This will also delete all related records (citations, social signals, etc.)
+    due to CASCADE delete configured in the foreign keys.
+
+    Args:
+        arxiv_id: The arXiv ID of the paper to delete
+
+    Returns:
+        True if paper was deleted, False if paper not found
+
+    Example:
+        if delete_paper("2512.18878v1"):
+            print("Paper deleted!")
+        else:
+            print("Paper not found")
+    """
+    from src.models.paper import Paper
+
+    try:
+        with get_db_session() as db:
+            paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+
+            if not paper:
+                logger.warning(f"Paper not found: {arxiv_id}")
+                return False
+
+            db.delete(paper)
+            db.commit()
+            logger.info(f"✅ Deleted paper: {arxiv_id}")
+            return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete paper {arxiv_id}: {e}")
+        return False
+
+
+def mark_paper_as_read(arxiv_id: str, status: str = "finished") -> bool:
+    """
+    Mark a paper as read (or update reading status).
+
+    Args:
+        arxiv_id: The arXiv ID of the paper
+        status: Reading status - "unread", "reading", "finished", "archived"
+
+    Returns:
+        True if successful, False if paper not found
+
+    Example:
+        mark_paper_as_read("2512.18878v1", "finished")
+        mark_paper_as_read("2512.18880v1", "reading")
+    """
+    from datetime import datetime
+
+    from src.models.paper import Paper, ReadingProgress
+
+    try:
+        with get_db_session() as db:
+            # Check if paper exists
+            paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+            if not paper:
+                logger.warning(f"Paper not found: {arxiv_id}")
+                return False
+
+            # Get or create reading progress record
+            progress = db.query(ReadingProgress).filter_by(paper_id=arxiv_id).first()
+
+            if not progress:
+                # Create new reading progress record
+                progress = ReadingProgress(
+                    paper_id=arxiv_id,
+                    status=status,
+                    started_at=datetime.now() if status != "unread" else None,
+                    finished_at=datetime.now() if status == "finished" else None,
+                )
+                db.add(progress)
+            else:
+                # Update existing record
+                old_status = progress.status
+                progress.status = status
+
+                # Update timestamps
+                if status != "unread" and not progress.started_at:
+                    progress.started_at = datetime.now()
+
+                if status == "finished" and not progress.finished_at:
+                    progress.finished_at = datetime.now()
+
+                # Reset finished_at if moving back from finished
+                if old_status == "finished" and status != "finished":
+                    progress.finished_at = None
+
+            db.commit()
+            logger.info(f"✅ Marked paper {arxiv_id} as {status}")
+            return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to mark paper {arxiv_id} as read: {e}")
+        return False
+
+
 if __name__ == "__main__":
     # Test database initialization
     print("Testing database setup...")
