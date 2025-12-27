@@ -203,6 +203,7 @@ omit = [
     "src/services/claude_client.py",
     "src/visualization/*",
     "src/dashboard/*",
+    "src/tui.py",                  # UI code - manually tested, complex to unit test
 ]
 
 [tool.coverage.report]
