@@ -170,7 +170,6 @@ class TestNodeFunctions:
         state = {
             "analyzed_papers": mock_papers,
             "explained_papers": None,
-            "final_papers": None,
             "errors": [],
             "stats": {},
         }
@@ -178,7 +177,7 @@ class TestNodeFunctions:
         result = explainer_node(state)
 
         assert result["explained_papers"] == explained_papers
-        assert result["final_papers"] == explained_papers
+        # Note: final_papers is now set by curator_node, not explainer_node
         assert result["stats"]["explained_count"] == 2
 
     def test_explainer_node_no_papers(self):
