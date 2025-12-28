@@ -432,9 +432,13 @@ def handle_show(args):
             print("SCORING")
             print("-" * 100)
             if paper.breakthrough_score is not None:
-                print(f"Breakthrough Score: {paper.breakthrough_score:.2f} (assessed at: {paper.assessed_at})")
+                print(
+                    f"Breakthrough Score: {paper.breakthrough_score:.2f} (assessed at: {paper.assessed_at})"
+                )
             if paper.relevance_score is not None:
-                print(f"Relevance Score:    {paper.relevance_score:.2f} (scored at: {paper.scored_at})")
+                print(
+                    f"Relevance Score:    {paper.relevance_score:.2f} (scored at: {paper.scored_at})"
+                )
 
         print("\n" + "=" * 100 + "\n")
 
