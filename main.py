@@ -143,9 +143,13 @@ def handle_discover(args):
             stats = result.get("stats", {})
             logger.info("=" * 60)
             logger.info("PIPELINE RESULTS:")
-            logger.info(f"  Discovered: {stats.get('discovered_count', 0)} papers")
-            logger.info(f"  Analyzed:   {stats.get('analyzed_count', 0)} papers")
-            logger.info(f"  Explained:  {stats.get('explained_count', 0)} papers")
+            logger.info(f"  Discovered:    {stats.get('discovered_count', 0)} papers")
+            logger.info(f"  Analyzed:      {stats.get('analyzed_count', 0)} papers")
+            logger.info(f"  Explained:     {stats.get('explained_count', 0)} papers")
+            logger.info(f"  HN signals:    {stats.get('hn_matched_count', 0)} matched")
+            logger.info(f"  Twitter:       {stats.get('twitter_matched_count', 0)} matched")
+            logger.info(f"  Breakthroughs: {stats.get('breakthrough_count', 0)} detected")
+            logger.info(f"  Curated:       {stats.get('curated_count', 0)} ranked")
             logger.info("=" * 60)
 
             # Check for errors
@@ -381,6 +385,8 @@ def handle_show(args):
                 ),
                 "relevance_score": paper.relevance_score,
                 "scored_at": paper.scored_at.isoformat() if paper.scored_at else None,
+                "breakthrough_score": paper.breakthrough_score,
+                "assessed_at": paper.assessed_at.isoformat() if paper.assessed_at else None,
             }
 
             print(json.dumps(paper_data, indent=2))
@@ -421,9 +427,14 @@ def handle_show(args):
             print(f"\nRelated Concepts: {paper.related_concepts}")
             print(f"\nExplained at: {paper.explained_at}")
 
-        if paper.relevance_score is not None:
+        if paper.breakthrough_score is not None or paper.relevance_score is not None:
             print("\n" + "-" * 100)
-            print(f"Relevance Score: {paper.relevance_score:.2f} (scored at: {paper.scored_at})")
+            print("SCORING")
+            print("-" * 100)
+            if paper.breakthrough_score is not None:
+                print(f"Breakthrough Score: {paper.breakthrough_score:.2f} (assessed at: {paper.assessed_at})")
+            if paper.relevance_score is not None:
+                print(f"Relevance Score:    {paper.relevance_score:.2f} (scored at: {paper.scored_at})")
 
         print("\n" + "=" * 100 + "\n")
 
