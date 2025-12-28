@@ -397,6 +397,104 @@ class TestConvenienceFunctions:
         mock_radar.run_once.assert_called_once()
 
 
+class TestNotify:
+    """Tests for notification logic."""
+
+    @pytest.fixture
+    def radar(self):
+        """Create a radar instance for testing."""
+        with patch("src.radar.daemon.settings") as mock_settings:
+            mock_settings.radar_interval_hours = 3
+            mock_settings.radar_start_hour = 5
+            mock_settings.radar_end_hour = 20
+            mock_settings.radar_timezone = "America/New_York"
+            mock_settings.notify_breakthrough_threshold = 0.6
+            mock_settings.notify_social_threshold = 0.3
+            mock_settings.notify_relevance_threshold = 0.5
+
+            with patch("src.radar.daemon.CuratorAgent"):
+                return ResearchRadar()
+
+    @pytest.fixture
+    def sample_paper(self):
+        """Create a sample paper."""
+        return Paper(
+            arxiv_id="2312.12345",
+            title="Test Paper",
+            abstract="Test abstract",
+            authors=["Test Author"],
+            published_date=datetime(2023, 12, 15),
+            categories=["cs.AI"],
+            pdf_url="https://arxiv.org/pdf/2312.12345",
+            abstract_url="https://arxiv.org/abs/2312.12345",
+        )
+
+    @patch("src.radar.daemon.send_paper_notification")
+    def test_notify_breakthrough_papers(self, mock_send, radar, sample_paper):
+        """Test notification for breakthrough papers uses breakthrough reason."""
+        sample_paper.breakthrough_score = 0.8  # Above threshold
+
+        radar._notify([sample_paper])
+
+        mock_send.assert_called_once_with([sample_paper], reason="breakthrough")
+
+    @patch("src.radar.daemon.send_paper_notification")
+    def test_notify_trending_papers(self, mock_send, radar, sample_paper):
+        """Test notification for non-breakthrough papers uses trending reason."""
+        sample_paper.breakthrough_score = 0.3  # Below threshold
+
+        radar._notify([sample_paper])
+
+        mock_send.assert_called_once_with([sample_paper], reason="trending")
+
+
+class TestStopMethod:
+    """Tests for the stop method."""
+
+    def test_stop_sets_running_false(self):
+        """Test that stop() sets running to False."""
+        with patch("src.radar.daemon.settings") as mock_settings:
+            mock_settings.radar_interval_hours = 3
+            mock_settings.radar_start_hour = 5
+            mock_settings.radar_end_hour = 20
+            mock_settings.radar_timezone = "America/New_York"
+            mock_settings.notify_breakthrough_threshold = 0.6
+            mock_settings.notify_social_threshold = 0.3
+            mock_settings.notify_relevance_threshold = 0.5
+
+            with patch("src.radar.daemon.CuratorAgent"):
+                radar = ResearchRadar()
+                radar.running = True
+                radar.stop()
+                assert radar.running is False
+
+
+class TestRunOnceMethod:
+    """Tests for run_once method."""
+
+    @patch("src.radar.daemon.settings")
+    @patch("src.radar.daemon.CuratorAgent")
+    def test_run_once_returns_scan_cycle_results(self, mock_curator, mock_settings):
+        """Test run_once returns results from scan cycle."""
+        mock_settings.radar_interval_hours = 3
+        mock_settings.radar_start_hour = 5
+        mock_settings.radar_end_hour = 20
+        mock_settings.radar_timezone = "America/New_York"
+        mock_settings.notify_breakthrough_threshold = 0.6
+        mock_settings.notify_social_threshold = 0.3
+        mock_settings.notify_relevance_threshold = 0.5
+
+        with patch.object(ResearchRadar, "_run_scan_cycle") as mock_cycle:
+            mock_cycle.return_value = {"new_papers": 10, "noteworthy_papers": 2}
+
+            radar = ResearchRadar()
+            result = radar.run_once()
+
+            assert result["new_papers"] == 10
+            assert result["noteworthy_papers"] == 2
+            mock_cycle.assert_called_once()
+
+
 class TestDiscoverNewPapers:
     """Tests for discovering new papers."""
 
