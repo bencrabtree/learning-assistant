@@ -1,4 +1,8 @@
-# Milestone 4: Interactive Knowledge Graph
+# Milestone 6: Interactive Knowledge Graph
+
+**Status:** Planned
+**Priority:** Medium
+**Dependencies:** Milestone 5 (Citation Velocity)
 
 ## The Ideal
 
@@ -205,11 +209,12 @@ class Paper:
 **Builds on previous milestones:**
 - M1 (Analysis): Shows analyzed paper details on click
 - M2 (Social Signals): Can size/color nodes by social proof
-- M3 (Citation Velocity): Can animate graph over time, show velocity trends
+- M3-M4 (Radar & Agentic): Integrates with discovery workflow
+- M5 (Citation Velocity): Can animate graph over time, show velocity trends
 
 **Enables future milestones:**
-- M5 (Progress Tracking): Visual progress indicator (% of graph read)
-- M6 (Synthesis): Identify themes by analyzing community structures
+- M7 (Progress Tracking): Visual progress indicator (% of graph read)
+- M8 (Synthesis): Identify themes by analyzing community structures
 
 ## Key Decisions
 

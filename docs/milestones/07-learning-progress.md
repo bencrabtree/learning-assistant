@@ -1,4 +1,8 @@
-# Milestone 5: Learning Progress & Personalization
+# Milestone 7: Learning Progress & Personalization
+
+**Status:** Planned
+**Priority:** Medium
+**Dependencies:** Milestone 6 (Knowledge Graph)
 
 ## The Ideal
 

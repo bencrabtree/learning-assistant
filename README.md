@@ -294,7 +294,7 @@ This is a **learning project** focused on understanding:
 
 ## Development Milestones
 
-The project is structured around **6 major milestones**, each delivering usable value. See [docs/milestones/](docs/milestones/) for detailed breakdowns.
+The project is structured around **8 major milestones**, each delivering usable value. See [docs/milestones/](docs/milestones/) for detailed breakdowns.
 
 ### Milestone 1: Deep Paper Analysis Engine
 **Status:** ✅ Complete
@@ -338,7 +338,39 @@ python main.py --explore
 
 ---
 
-### Milestone 3: Citation Velocity & Trend Detection
+### Milestone 3: Research Radar Daemon
+**Status:** 🔄 In Progress (PR #14)
+
+**Delivers:** Background monitoring with email notifications for important papers
+
+**Key features:**
+- Background daemon with configurable schedule
+- Dual discovery mode (new papers + rising/trending older papers)
+- Noteworthy filtering (breakthrough score, social signals, relevance)
+- Email notifications (HTML/plaintext, Gmail SMTP support)
+- CLI commands: `--radar`, `--radar-once`, `--test-email`
+
+**Value:** Proactive notifications when important research appears
+
+---
+
+### Milestone 4: Agentic LangGraph Workflow
+**Status:** 📋 Planned
+
+**Delivers:** Truly agentic radar using LangGraph patterns
+
+**Key features:**
+- Radar loop as a LangGraph workflow with conditional edges
+- Runtime decision-making (notify vs expand search)
+- Iterative search with expansion strategies
+- State accumulation across iterations
+- Autonomous graph-based decision making
+
+**Value:** Learn core LangGraph patterns (conditional routing, state evolution)
+
+---
+
+### Milestone 5: Citation Velocity & Trend Detection
 **Status:** 📋 Planned
 
 **Delivers:** Detect papers gaining research momentum
@@ -354,7 +386,7 @@ python main.py --explore
 
 ---
 
-### Milestone 4: Interactive Knowledge Graph
+### Milestone 6: Interactive Knowledge Graph
 **Status:** 📋 Planned
 
 **Delivers:** Visual, explorable research landscape
@@ -370,7 +402,7 @@ python main.py --explore
 
 ---
 
-### Milestone 5: Learning Progress & Personalization
+### Milestone 7: Learning Progress & Personalization
 **Status:** 📋 Planned
 
 **Delivers:** Track learning journey and get personalized recommendations
@@ -386,7 +418,7 @@ python main.py --explore
 
 ---
 
-### Milestone 6: Synthesis & Production Readiness
+### Milestone 8: Synthesis & Production Readiness
 **Status:** 📋 Planned
 
 **Delivers:** Weekly insights and fully autonomous operation
@@ -405,7 +437,7 @@ python main.py --explore
 
 ## Future Enhancements
 
-**Beyond the 6 milestones**, potential extensions include:
+**Beyond the 8 milestones**, potential extensions include:
 
 - **Multi-user support** - Team research collaboration
 - **Zotero/Mendeley integration** - Sync with existing tools

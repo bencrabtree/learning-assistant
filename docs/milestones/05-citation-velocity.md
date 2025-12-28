@@ -1,4 +1,8 @@
-# Milestone 3: Citation Velocity & Trend Detection
+# Milestone 5: Citation Velocity & Trend Detection
+
+**Status:** Planned
+**Priority:** Medium
+**Dependencies:** Milestone 4 (Agentic LangGraph)
 
 ## The Ideal
 
@@ -168,11 +172,12 @@ class Citation:
 **Builds on previous milestones:**
 - M1 (Analysis): Needs analyzed papers to track citations for
 - M2 (Social Signals): Can cross-validate - do social signals predict citation velocity?
+- M3-M4 (Radar & Agentic): Integrates velocity into discovery workflow
 
 **Enables future milestones:**
-- M4 (Knowledge Graph): Use citation edges to build relationship graph
-- M5 (Progress Tracking): Recommend trending papers you haven't read yet
-- M6 (Synthesis): Identify emerging trends across multiple trending papers
+- M6 (Knowledge Graph): Use citation edges to build relationship graph
+- M7 (Progress Tracking): Recommend trending papers you haven't read yet
+- M8 (Synthesis): Identify emerging trends across multiple trending papers
 
 ## Key Decisions
 
