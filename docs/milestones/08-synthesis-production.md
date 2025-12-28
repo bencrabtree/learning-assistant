@@ -1,4 +1,8 @@
-# Milestone 6: Synthesis & Production Readiness
+# Milestone 8: Synthesis & Production Readiness
+
+**Status:** Planned
+**Priority:** Medium
+**Dependencies:** Milestone 7 (Learning Progress)
 
 ## The Ideal
 
