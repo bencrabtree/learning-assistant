@@ -153,6 +153,59 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Research Radar Settings - Background monitoring
+    # ============================================================================
+
+    radar_enabled: bool = Field(
+        default=False,
+        alias="RADAR_ENABLED",
+        description="Enable background research radar",
+    )
+
+    radar_interval_hours: int = Field(
+        default=3,
+        alias="RADAR_INTERVAL_HOURS",
+        description="How often to run the radar (in hours)",
+    )
+
+    radar_start_hour: int = Field(
+        default=5,
+        alias="RADAR_START_HOUR",
+        description="Hour to start radar (24h format, in radar_timezone)",
+    )
+
+    radar_end_hour: int = Field(
+        default=20,
+        alias="RADAR_END_HOUR",
+        description="Hour to stop radar (24h format, in radar_timezone)",
+    )
+
+    radar_timezone: str = Field(
+        default="America/New_York",
+        alias="RADAR_TIMEZONE",
+        description="Timezone for radar schedule",
+    )
+
+    # Notification thresholds (aggressive = lower values)
+    notify_breakthrough_threshold: float = Field(
+        default=0.6,
+        alias="NOTIFY_BREAKTHROUGH_THRESHOLD",
+        description="Minimum breakthrough score to trigger notification",
+    )
+
+    notify_social_threshold: float = Field(
+        default=0.3,
+        alias="NOTIFY_SOCIAL_THRESHOLD",
+        description="Minimum social score to trigger notification",
+    )
+
+    notify_relevance_threshold: float = Field(
+        default=0.5,
+        alias="NOTIFY_RELEVANCE_THRESHOLD",
+        description="Minimum relevance score to trigger notification",
+    )
+
+    # ============================================================================
     # Logging
     # ============================================================================
 

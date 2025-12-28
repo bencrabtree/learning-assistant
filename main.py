@@ -497,6 +497,68 @@ def handle_stats(args):
 
 
 # ============================================================================
+# Radar Command Handlers
+# ============================================================================
+
+
+def handle_radar(args):
+    """
+    Start the Research Radar daemon.
+
+    Runs continuously in the foreground, scanning for noteworthy papers
+    and sending email notifications when found.
+
+    Example:
+        python main.py --radar
+    """
+    from src.radar import run_radar
+
+    logger.info("Starting Research Radar daemon...")
+    run_radar()
+
+
+def handle_radar_once(args):
+    """
+    Run a single radar scan (for testing).
+
+    Example:
+        python main.py --radar-once
+    """
+    from src.radar import run_radar_once
+
+    logger.info("Running single radar scan...")
+    results = run_radar_once()
+
+    logger.info("=" * 60)
+    logger.info("RADAR SCAN RESULTS:")
+    logger.info(f"  New papers:        {results.get('new_papers', 0)}")
+    logger.info(f"  Rising papers:     {results.get('rising_papers', 0)}")
+    logger.info(f"  Noteworthy:        {results.get('noteworthy_papers', 0)}")
+    logger.info(f"  Notifications:     {results.get('notifications_sent', 0)}")
+    logger.info("=" * 60)
+
+    if results.get("errors"):
+        logger.warning(f"Errors: {results['errors']}")
+
+
+def handle_test_email(args):
+    """
+    Test email configuration by sending a test message.
+
+    Example:
+        python main.py --test-email
+    """
+    from src.services.email_notifier import test_email_connection
+
+    logger.info("Testing email configuration...")
+    if test_email_connection():
+        logger.info("Email test successful! Check your inbox.")
+    else:
+        logger.error("Email test failed. Check your SMTP settings in .env")
+        sys.exit(1)
+
+
+# ============================================================================
 # Utilities
 # ============================================================================
 
@@ -622,6 +684,26 @@ Examples:
         help="Output format for --list, --stats, or --show (default: text)",
     )
 
+    # ==================== RADAR COMMANDS ====================
+    radar_group = parser.add_argument_group(
+        "Research Radar", "Background monitoring and notifications"
+    )
+    radar_group.add_argument(
+        "--radar",
+        action="store_true",
+        help="Start the Research Radar daemon (runs in foreground)",
+    )
+    radar_group.add_argument(
+        "--radar-once",
+        action="store_true",
+        help="Run a single radar scan (for testing)",
+    )
+    radar_group.add_argument(
+        "--test-email",
+        action="store_true",
+        help="Test email configuration",
+    )
+
     # ==================== OTHER OPTIONS ====================
     other_group = parser.add_argument_group("Other")
     other_group.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -655,6 +737,12 @@ Examples:
             handle_list(args)
         elif args.stats:
             handle_stats(args)
+        elif args.radar:
+            handle_radar(args)
+        elif args.radar_once:
+            handle_radar_once(args)
+        elif args.test_email:
+            handle_test_email(args)
         else:
             # No command specified, show help
             parser.print_help()
