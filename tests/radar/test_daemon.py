@@ -541,3 +541,163 @@ class TestDiscoverNewPapers:
         result = radar._discover_new_papers()
 
         assert result == []
+
+    @patch("src.radar.daemon.run_full_pipeline")
+    def test_discover_logs_pipeline_warnings(self, mock_pipeline, radar):
+        """Test discovery logs warnings from pipeline."""
+        mock_pipeline.return_value = {
+            "ranked_papers": [],
+            "errors": ["Warning 1", "Warning 2"],
+        }
+
+        result = radar._discover_new_papers()
+
+        assert result == []
+
+
+class TestFindRisingPapers:
+    """Tests for finding rising papers."""
+
+    @pytest.fixture
+    def radar(self):
+        """Create a radar instance for testing."""
+        with patch("src.radar.daemon.settings") as mock_settings:
+            mock_settings.radar_interval_hours = 3
+            mock_settings.radar_start_hour = 5
+            mock_settings.radar_end_hour = 20
+            mock_settings.radar_timezone = "America/New_York"
+            mock_settings.notify_breakthrough_threshold = 0.6
+            mock_settings.notify_social_threshold = 0.3
+            mock_settings.notify_relevance_threshold = 0.5
+
+            with patch("src.radar.daemon.CuratorAgent"):
+                return ResearchRadar()
+
+    @patch("src.radar.daemon.fetch_hn_signals")
+    def test_find_rising_no_signals(self, mock_fetch, radar):
+        """Test finding rising papers with no HN signals."""
+        mock_fetch.return_value = []
+
+        result = radar._find_rising_papers()
+
+        assert result == []
+
+    @patch("src.radar.daemon.fetch_hn_signals")
+    def test_find_rising_handles_errors(self, mock_fetch, radar):
+        """Test finding rising papers handles errors gracefully."""
+        mock_fetch.side_effect = Exception("HN API error")
+
+        result = radar._find_rising_papers()
+
+        assert result == []
+
+
+class TestInterruptibleSleep:
+    """Tests for interruptible sleep."""
+
+    @pytest.fixture
+    def radar(self):
+        """Create a radar instance for testing."""
+        with patch("src.radar.daemon.settings") as mock_settings:
+            mock_settings.radar_interval_hours = 3
+            mock_settings.radar_start_hour = 5
+            mock_settings.radar_end_hour = 20
+            mock_settings.radar_timezone = "America/New_York"
+            mock_settings.notify_breakthrough_threshold = 0.6
+            mock_settings.notify_social_threshold = 0.3
+            mock_settings.notify_relevance_threshold = 0.5
+
+            with patch("src.radar.daemon.CuratorAgent"):
+                return ResearchRadar()
+
+    @patch("src.radar.daemon.time.sleep")
+    def test_interruptible_sleep_completes(self, mock_sleep, radar):
+        """Test interruptible sleep completes when running."""
+        radar.running = True
+
+        radar._interruptible_sleep(5)  # 5 seconds
+
+        # Should sleep once (5 < 10 interval)
+        mock_sleep.assert_called()
+
+    @patch("src.radar.daemon.time.sleep")
+    def test_interruptible_sleep_stops_when_not_running(self, mock_sleep, radar):
+        """Test interruptible sleep stops when running is False."""
+        radar.running = False
+
+        radar._interruptible_sleep(30)
+
+        # Should not sleep at all when not running
+        mock_sleep.assert_not_called()
+
+
+class TestScanCycleEdgeCases:
+    """Additional edge case tests for scan cycle."""
+
+    @pytest.fixture
+    def radar(self):
+        """Create a radar instance for testing."""
+        with patch("src.radar.daemon.settings") as mock_settings:
+            mock_settings.radar_interval_hours = 3
+            mock_settings.radar_start_hour = 5
+            mock_settings.radar_end_hour = 20
+            mock_settings.radar_timezone = "America/New_York"
+            mock_settings.notify_breakthrough_threshold = 0.6
+            mock_settings.notify_social_threshold = 0.3
+            mock_settings.notify_relevance_threshold = 0.5
+
+            with patch("src.radar.daemon.CuratorAgent"):
+                return ResearchRadar()
+
+    @patch("src.radar.daemon.run_full_pipeline")
+    @patch("src.radar.daemon.fetch_hn_signals")
+    @patch("src.radar.daemon.send_paper_notification")
+    def test_scan_cycle_notification_failure(self, mock_notify, mock_hn, mock_pipeline, radar):
+        """Test scan cycle handles notification failure."""
+        breakthrough_paper = Paper(
+            arxiv_id="2312.12345",
+            title="Breakthrough Paper",
+            abstract="Test abstract",
+            authors=["Test Author"],
+            published_date=datetime(2023, 12, 15),
+            categories=["cs.AI"],
+            pdf_url="https://arxiv.org/pdf/2312.12345",
+            abstract_url="https://arxiv.org/abs/2312.12345",
+            breakthrough_score=0.8,
+            relevance_score=0.7,
+        )
+
+        mock_pipeline.return_value = {"ranked_papers": [breakthrough_paper]}
+        mock_hn.return_value = []
+        mock_notify.return_value = False  # Notification fails
+
+        results = radar._run_scan_cycle()
+
+        assert results["noteworthy_papers"] == 1
+        assert results["notifications_sent"] == 0  # No notifications sent due to failure
+
+    @patch("src.radar.daemon.run_full_pipeline")
+    @patch("src.radar.daemon.fetch_hn_signals")
+    def test_scan_cycle_with_no_noteworthy(self, mock_hn, mock_pipeline, radar):
+        """Test scan cycle when no papers meet threshold."""
+        low_score_paper = Paper(
+            arxiv_id="2312.12345",
+            title="Low Score Paper",
+            abstract="Test abstract",
+            authors=["Test Author"],
+            published_date=datetime(2023, 12, 15),
+            categories=["cs.AI"],
+            pdf_url="https://arxiv.org/pdf/2312.12345",
+            abstract_url="https://arxiv.org/abs/2312.12345",
+            breakthrough_score=0.3,  # Below threshold
+            relevance_score=0.3,  # Below threshold
+        )
+
+        mock_pipeline.return_value = {"ranked_papers": [low_score_paper]}
+        mock_hn.return_value = []
+
+        results = radar._run_scan_cycle()
+
+        assert results["new_papers"] == 1
+        assert results["noteworthy_papers"] == 0
+        assert results["notifications_sent"] == 0
