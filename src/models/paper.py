@@ -182,6 +182,17 @@ class Paper(Base):
     scored_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
+    # Assessment Fields - Populated by Assessor Agent
+    # ------------------------------------------------------------------------
+    # Breakthrough detection scoring (high bar - only ~1-2% of papers)
+
+    # Breakthrough score (0-1, weighted combination of novelty/impact/evidence/significance)
+    breakthrough_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # When the assessment was done
+    assessed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ------------------------------------------------------------------------
     # Relationships - Links to other tables
     # ------------------------------------------------------------------------
     # SQLAlchemy relationships let us easily access related data
@@ -214,6 +225,7 @@ class Paper(Base):
 Index("idx_published_date", Paper.published_date)
 Index("idx_relevance_score", Paper.relevance_score)
 Index("idx_discovered_at", Paper.discovered_at)
+Index("idx_breakthrough_score", Paper.breakthrough_score)
 
 
 # ============================================================================

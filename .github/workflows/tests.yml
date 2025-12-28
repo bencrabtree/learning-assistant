@@ -136,7 +136,7 @@ jobs:
           pip install pytest pytest-cov pytest-mock
 
       - name: Run integration tests
-        run: pytest tests/ -v -m integration --tb=short
+        run: pytest tests/ -v -m integration --tb=short --no-cov
         env:
           # Mock API keys for integration tests
           ANTHROPIC_API_KEY: "test-key"

@@ -16,14 +16,13 @@ LangGraph Benefits:
 - Easy to modify (add/remove agents)
 - Clear execution flow
 
-Our Workflow (Week 1 MVP):
-    START → Discovery → Reader → Explainer → END
+Our Workflow (Milestone 2):
+    START → Discovery → Reader → Explainer → Signals → Assessor → Curator → END
 
-Future workflows will add:
-- Parallel discovery sources (Twitter, HN, Citations)
-- Curator for scoring/ranking
-- Email generation
-- Conditional branching (retry logic, error handling)
+Milestone 2 additions:
+- Social signals (HackerNews engagement)
+- Breakthrough detection (Claude assessment)
+- Multi-signal scoring and ranking
 
 Example usage:
     graph = create_workflow()
@@ -31,19 +30,23 @@ Example usage:
         "days_back": 1,
         "categories": ["cs.AI", "cs.LG"]
     })
-    papers = result["explained_papers"]
+    papers = result["final_papers"]
 """
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 from loguru import logger
 
+from src.agents.assessor import assess_papers_batch
+from src.agents.curator import curate_papers_batch
 from src.agents.discovery import discover_papers
 from src.agents.explainer import explain_papers_batch
 from src.agents.reader import analyze_papers_batch
 from src.database import get_db_session
 from src.models.paper import Paper
+from src.trackers.hackernews import fetch_hn_signals
+from src.trackers.twitter import fetch_twitter_signals
 
 # ============================================================================
 # State Definition
@@ -102,8 +105,31 @@ class AgentState(TypedDict):
     """Papers explained by Explainer agent (with eli5_summary, etc.)"""
 
     # ========================================================================
+    # Social Signal Fields - From signal trackers (Milestone 2)
+    # ========================================================================
+
+    hn_signals: list[dict[str, Any]] | None
+    """HackerNews engagement data for papers"""
+
+    twitter_signals: list[dict[str, Any]] | None
+    """Twitter engagement data for papers"""
+
+    # ========================================================================
+    # Assessment Fields - From assessor agent (Milestone 2)
+    # ========================================================================
+
+    assessments: list[dict[str, Any]] | None
+    """Breakthrough assessments for papers"""
+
+    assessed_papers: list[Paper] | None
+    """Papers after breakthrough assessment"""
+
+    # ========================================================================
     # Output Fields - Final results
     # ========================================================================
+
+    ranked_papers: list[Paper] | None
+    """Papers after multi-signal scoring and ranking"""
 
     final_papers: list[Paper] | None
     """Final set of papers to include in digest (after scoring/filtering)"""
@@ -304,8 +330,6 @@ def explainer_node(state: AgentState) -> AgentState:
 
         # Update state
         state["explained_papers"] = explained
-        # For now, final_papers = explained_papers (no filtering yet)
-        state["final_papers"] = explained
 
         # Update stats
         if "stats" not in state or state["stats"] is None:
@@ -318,7 +342,227 @@ def explainer_node(state: AgentState) -> AgentState:
             state["errors"] = []
         state["errors"].append(f"Explainer error: {e!s}")
         state["explained_papers"] = []
-        state["final_papers"] = []
+
+    return state
+
+
+def signal_node(state: AgentState) -> AgentState:
+    """
+    Signal Node - Fetch social signals from HackerNews and Twitter.
+
+    This node:
+    1. Fetches HN signals for arXiv papers
+    2. Fetches Twitter signals (if configured)
+    3. Matches signals to discovered papers
+    4. Stores signal data in paper.score_components
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Updated state with hn_signals and twitter_signals
+    """
+    logger.info("📡 Signal Node - Fetching social signals...")
+
+    try:
+        papers = state.get("explained_papers", [])
+        days_back = state.get("days_back", 7)
+
+        if not papers:
+            logger.warning("No papers to fetch signals for")
+            state["hn_signals"] = []
+            state["twitter_signals"] = []
+            return state
+
+        # Fetch HN signals
+        hn_signals = fetch_hn_signals(days_back=days_back)
+        logger.info(f"Found {len(hn_signals)} papers mentioned on HN")
+
+        # Fetch Twitter signals (optional - requires API key)
+        twitter_signals = fetch_twitter_signals(days_back=days_back)
+        if twitter_signals:
+            logger.info(f"Found {len(twitter_signals)} papers mentioned on Twitter")
+
+        # Create lookups by arxiv_id
+        hn_map = {s["arxiv_id"]: s for s in hn_signals}
+        twitter_map = {s["arxiv_id"]: s for s in twitter_signals}
+
+        # Match signals to papers and update score_components
+        hn_matched = 0
+        twitter_matched = 0
+
+        with get_db_session() as db:
+            for paper in papers:
+                if paper.score_components is None:
+                    paper.score_components = {}
+
+                # Match HN signals
+                if paper.arxiv_id in hn_map:
+                    signal = hn_map[paper.arxiv_id]
+                    paper.score_components["hn_score"] = signal.get("score", 0)
+                    paper.score_components["hn_comments"] = signal.get("comments_count", 0)
+                    paper.score_components["hn_social_score"] = signal.get("social_score", 0.0)
+                    hn_matched += 1
+
+                # Match Twitter signals
+                if paper.arxiv_id in twitter_map:
+                    signal = twitter_map[paper.arxiv_id]
+                    paper.score_components["twitter_likes"] = signal.get("likes", 0)
+                    paper.score_components["twitter_retweets"] = signal.get("retweets", 0)
+                    paper.score_components["twitter_social_score"] = signal.get("social_score", 0.0)
+                    paper.score_components["twitter_is_lab"] = signal.get("is_lab_account", False)
+                    twitter_matched += 1
+
+                # Update in database if any signals matched
+                if paper.arxiv_id in hn_map or paper.arxiv_id in twitter_map:
+                    db_paper = db.query(Paper).filter_by(arxiv_id=paper.arxiv_id).first()
+                    if db_paper:
+                        db_paper.score_components = paper.score_components
+
+        logger.info(f"✅ Matched {hn_matched} papers with HN, {twitter_matched} with Twitter")
+
+        state["hn_signals"] = hn_signals
+        state["twitter_signals"] = twitter_signals
+        if "stats" not in state or state["stats"] is None:
+            state["stats"] = {}
+        state["stats"]["hn_signals_count"] = len(hn_signals)
+        state["stats"]["hn_matched_count"] = hn_matched
+        state["stats"]["twitter_signals_count"] = len(twitter_signals)
+        state["stats"]["twitter_matched_count"] = twitter_matched
+
+    except Exception as e:
+        logger.error(f"❌ Signal node failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Signal error: {e!s}")
+        state["hn_signals"] = []
+        state["twitter_signals"] = []
+
+    return state
+
+
+def assessor_node(state: AgentState) -> AgentState:
+    """
+    Assessor Node - Evaluate papers for breakthrough potential.
+
+    This node:
+    1. Reads explained papers from state
+    2. Runs breakthrough assessment with Claude
+    3. Stores breakthrough_score on papers
+
+    The Assessor agent evaluates:
+    - Novelty (how original is the approach)
+    - Impact (potential to change the field)
+    - Evidence (quality of experimental validation)
+    - Significance (importance of problem being solved)
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Updated state with assessments and assessed_papers
+    """
+    logger.info("🎯 Assessor Node - Evaluating breakthrough potential...")
+
+    try:
+        papers = state.get("explained_papers", [])
+
+        if not papers:
+            logger.warning("No papers to assess")
+            state["assessments"] = []
+            state["assessed_papers"] = []
+            return state
+
+        logger.info(f"Assessing {len(papers)} papers for breakthrough potential...")
+
+        # Run batch assessment
+        assessed_papers, assessments = assess_papers_batch(papers)
+
+        breakthrough_count = sum(1 for a in assessments if a.get("is_breakthrough", False))
+        logger.info(
+            f"✅ Assessment complete: {breakthrough_count}/{len(papers)} breakthroughs detected"
+        )
+
+        state["assessments"] = assessments
+        state["assessed_papers"] = assessed_papers
+
+        if "stats" not in state or state["stats"] is None:
+            state["stats"] = {}
+        state["stats"]["assessed_count"] = len(assessed_papers)
+        state["stats"]["breakthrough_count"] = breakthrough_count
+
+    except Exception as e:
+        logger.error(f"❌ Assessor node failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Assessor error: {e!s}")
+        state["assessments"] = []
+        state["assessed_papers"] = state.get("explained_papers", [])
+
+    return state
+
+
+def curator_node(state: AgentState) -> AgentState:
+    """
+    Curator Node - Score and rank papers using multi-signal scoring.
+
+    This node:
+    1. Reads assessed papers from state
+    2. Calculates combined scores from all signals
+    3. Ranks papers by relevance
+    4. Selects final papers for digest
+
+    Scoring weights:
+    - Interest match: 25%
+    - Social proof: 25%
+    - Citation score: 20%
+    - Breakthrough: 30%
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Updated state with ranked_papers and final_papers
+    """
+    logger.info("📊 Curator Node - Scoring and ranking papers...")
+
+    try:
+        papers = state.get("assessed_papers", [])
+
+        if not papers:
+            logger.warning("No papers to curate")
+            state["ranked_papers"] = []
+            state["final_papers"] = []
+            return state
+
+        logger.info(f"Curating {len(papers)} papers with multi-signal scoring...")
+
+        # Run curator (scores, ranks, saves)
+        ranked_papers = curate_papers_batch(papers)
+
+        logger.info(f"✅ Curation complete: {len(ranked_papers)} papers ranked")
+
+        # Log top papers
+        if ranked_papers:
+            logger.info("Top 5 papers by relevance:")
+            for i, paper in enumerate(ranked_papers[:5], 1):
+                score = paper.relevance_score or 0
+                logger.info(f"  {i}. [{score:.2f}] {paper.title[:60]}...")
+
+        state["ranked_papers"] = ranked_papers
+        state["final_papers"] = ranked_papers
+
+        if "stats" not in state or state["stats"] is None:
+            state["stats"] = {}
+        state["stats"]["curated_count"] = len(ranked_papers)
+
+    except Exception as e:
+        logger.error(f"❌ Curator node failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Curator error: {e!s}")
+        state["ranked_papers"] = []
+        state["final_papers"] = state.get("assessed_papers", [])
 
     return state
 
@@ -334,14 +578,16 @@ def create_workflow() -> StateGraph:
 
     This defines the execution flow of our agent system.
 
-    Week 1 MVP Flow:
-        START → Discovery → Reader → Explainer → END
+    Milestone 2 Flow:
+        START → Discovery → Reader → Explainer → Signals → Assessor → Curator → END
 
-    Future expansions:
-        - Add Curator node (scoring/ranking)
-        - Add Email node (generate and send digest)
-        - Add parallel discovery (Twitter, HN)
-        - Add conditional edges (retry logic)
+    The workflow:
+    1. Discovery: Find papers from arXiv
+    2. Reader: Analyze papers with Claude Haiku
+    3. Explainer: Generate ELI5 explanations with Claude Sonnet
+    4. Signals: Fetch HackerNews social signals
+    5. Assessor: Evaluate breakthrough potential
+    6. Curator: Multi-signal scoring and ranking
 
     Returns:
         Compiled StateGraph ready to execute
@@ -360,6 +606,9 @@ def create_workflow() -> StateGraph:
     workflow.add_node("discovery", discovery_node)
     workflow.add_node("reader", reader_node)
     workflow.add_node("explainer", explainer_node)
+    workflow.add_node("signals", signal_node)
+    workflow.add_node("assessor", assessor_node)
+    workflow.add_node("curator", curator_node)
 
     # Define edges (what runs next)
     # set_entry_point: This is where execution starts
@@ -368,16 +617,19 @@ def create_workflow() -> StateGraph:
     # Add sequential edges (A → B means "run B after A")
     workflow.add_edge("discovery", "reader")
     workflow.add_edge("reader", "explainer")
+    workflow.add_edge("explainer", "signals")
+    workflow.add_edge("signals", "assessor")
+    workflow.add_edge("assessor", "curator")
 
     # set_finish_point: This is where execution ends
-    workflow.add_edge("explainer", END)
+    workflow.add_edge("curator", END)
 
     # Compile the graph
     # This validates the graph and prepares it for execution
     app = workflow.compile()
 
     logger.info("✅ Workflow built successfully!")
-    logger.info("Flow: START → Discovery → Reader → Explainer → END")
+    logger.info("Flow: START → Discovery → Reader → Explainer → Signals → Assessor → Curator → END")
 
     return app
 
@@ -429,6 +681,11 @@ def run_full_pipeline(
         "discovered_papers": None,
         "analyzed_papers": None,
         "explained_papers": None,
+        "hn_signals": None,
+        "twitter_signals": None,
+        "assessments": None,
+        "assessed_papers": None,
+        "ranked_papers": None,
         "final_papers": None,
         "errors": [],
         "stats": {},
@@ -499,6 +756,11 @@ def run_discovery_only_pipeline(
         "discovered_papers": None,
         "analyzed_papers": None,
         "explained_papers": None,
+        "hn_signals": None,
+        "twitter_signals": None,
+        "assessments": None,
+        "assessed_papers": None,
+        "ranked_papers": None,
         "final_papers": None,
         "errors": [],
         "stats": {},
@@ -551,9 +813,17 @@ def run_analysis_pipeline() -> AgentState:
     if not unanalyzed:
         logger.info("No unanalyzed papers found")
         return {
+            "days_back": None,
+            "categories": None,
+            "max_papers": None,
             "discovered_papers": [],
             "analyzed_papers": [],
             "explained_papers": [],
+            "hn_signals": [],
+            "twitter_signals": [],
+            "assessments": [],
+            "assessed_papers": [],
+            "ranked_papers": [],
             "final_papers": [],
             "errors": [],
             "stats": {
@@ -584,6 +854,11 @@ def run_analysis_pipeline() -> AgentState:
         "discovered_papers": unanalyzed,  # Use existing papers
         "analyzed_papers": None,
         "explained_papers": None,
+        "hn_signals": None,
+        "twitter_signals": None,
+        "assessments": None,
+        "assessed_papers": None,
+        "ranked_papers": None,
         "final_papers": None,
         "errors": [],
         "stats": {"discovered_count": len(unanalyzed)},

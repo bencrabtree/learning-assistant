@@ -168,6 +168,24 @@ This runs **exactly** what GitHub Actions will run:
 
 **Zero wasted CI/CD runs. Zero wasted time.**
 
+### Post-Schema Change Validation
+
+**After modifying database models (src/models/paper.py), ALWAYS:**
+
+1. **Reset the local database:**
+   ```bash
+   python main.py --init-db --reset --yes
+   ```
+
+2. **Run the example command from README to verify E2E:**
+   ```bash
+   python main.py --discover --days 7 --analyze --max-papers 3
+   ```
+
+3. **Check for schema errors** like `no such column` - these indicate the database wasn't reset after model changes.
+
+**Why:** Unit tests use in-memory databases that are created fresh. The local SQLite file retains the old schema, causing runtime errors that tests won't catch.
+
 ### Testing Standards
 
 **Unit tests:**

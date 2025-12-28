@@ -33,7 +33,20 @@ class TestWorkflowOrchestration:
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
     @patch("src.graph.explain_papers_batch")
-    def test_full_pipeline_orchestration(self, mock_explain, mock_analyze, mock_discover):
+    @patch("src.graph.fetch_hn_signals")
+    @patch("src.graph.fetch_twitter_signals")
+    @patch("src.graph.assess_papers_batch")
+    @patch("src.graph.curate_papers_batch")
+    def test_full_pipeline_orchestration(
+        self,
+        mock_curate,
+        mock_assess,
+        mock_twitter,
+        mock_hn,
+        mock_explain,
+        mock_analyze,
+        mock_discover,
+    ):
         """Test that full pipeline correctly orchestrates all agents."""
         # Create simple mock papers (not Mock objects, but simple dicts)
         mock_papers = [
@@ -44,6 +57,9 @@ class TestWorkflowOrchestration:
                 analyzed_at=None,
                 eli5_summary=None,
                 explained_at=None,
+                breakthrough_score=None,
+                assessed_at=None,
+                relevance_score=None,
             )
             for i in range(2)
         ]
@@ -61,6 +77,23 @@ class TestWorkflowOrchestration:
             p.eli5_summary = "Simple explanation"
             p.explained_at = datetime.now(UTC)
         mock_explain.return_value = explained
+
+        # Mock social signals
+        mock_hn.return_value = []
+        mock_twitter.return_value = []
+
+        # Mock assessor (returns tuple of papers, assessments)
+        assessed = explained.copy()
+        for p in assessed:
+            p.breakthrough_score = 0.5
+            p.assessed_at = datetime.now(UTC)
+        assessments = [{"is_breakthrough": False} for _ in assessed]
+        mock_assess.return_value = (assessed, assessments)
+
+        ranked = assessed.copy()
+        for p in ranked:
+            p.relevance_score = 0.7
+        mock_curate.return_value = ranked
 
         result = run_full_pipeline(days_back=1, max_papers=2)
 
@@ -146,13 +179,32 @@ class TestErrorHandling:
 
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
-    def test_pipeline_continues_after_analysis_failure(self, mock_analyze, mock_discover):
+    @patch("src.graph.explain_papers_batch")
+    @patch("src.graph.fetch_hn_signals")
+    @patch("src.graph.fetch_twitter_signals")
+    @patch("src.graph.assess_papers_batch")
+    @patch("src.graph.curate_papers_batch")
+    def test_pipeline_continues_after_analysis_failure(
+        self,
+        mock_curate,
+        mock_assess,
+        mock_twitter,
+        mock_hn,
+        mock_explain,
+        mock_analyze,
+        mock_discover,
+    ):
         """Test that pipeline continues after partial failures."""
         mock_papers = [Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(2)]
         mock_discover.return_value = mock_papers
 
         # Analysis fails but pipeline should continue
         mock_analyze.side_effect = Exception("Rate limit exceeded")
+        mock_explain.return_value = []
+        mock_hn.return_value = []
+        mock_twitter.return_value = []
+        mock_assess.return_value = ([], [])
+        mock_curate.return_value = []
 
         result = run_full_pipeline(days_back=1)
 
@@ -166,10 +218,31 @@ class TestStateManagement:
     """Test state propagation through workflows."""
 
     @patch("src.graph.discover_papers")
-    def test_max_papers_limit_enforced(self, mock_discover):
+    @patch("src.graph.analyze_papers_batch")
+    @patch("src.graph.explain_papers_batch")
+    @patch("src.graph.fetch_hn_signals")
+    @patch("src.graph.fetch_twitter_signals")
+    @patch("src.graph.assess_papers_batch")
+    @patch("src.graph.curate_papers_batch")
+    def test_max_papers_limit_enforced(
+        self,
+        mock_curate,
+        mock_assess,
+        mock_twitter,
+        mock_hn,
+        mock_explain,
+        mock_analyze,
+        mock_discover,
+    ):
         """Test that max_papers limit is enforced."""
         mock_papers = [Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(5)]
         mock_discover.return_value = mock_papers
+        mock_analyze.return_value = mock_papers[:2]
+        mock_explain.return_value = mock_papers[:2]
+        mock_hn.return_value = []
+        mock_twitter.return_value = []
+        mock_assess.return_value = (mock_papers[:2], [{"is_breakthrough": False}] * 2)
+        mock_curate.return_value = mock_papers[:2]
 
         result = run_full_pipeline(days_back=1, max_papers=2)
 

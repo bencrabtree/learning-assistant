@@ -313,18 +313,28 @@ The project is structured around **6 major milestones**, each delivering usable 
 ---
 
 ### Milestone 2: Social Proof & Community Signals
-**Status:** 🚧 In Progress
+**Status:** ✅ Complete
 
-**Delivers:** Identify "hot papers" via Twitter, HackerNews, and lab publications
+**Delivers:** Identify "hot papers" via Twitter, HackerNews, and breakthrough detection
 
 **Key features:**
-- Twitter tracker (AI lab accounts, researcher discussions)
-- HackerNews tracker (front page posts, Show HN)
-- Lab website tracker (official releases)
-- Multi-signal scoring (social proof + recency + interest)
-- Email badges (🔥 Trending, 🐦 Lab mention)
+- Twitter tracker (AI lab accounts: Anthropic, OpenAI, DeepMind, etc.)
+- HackerNews tracker (Algolia API for arXiv discussions)
+- Semantic Scholar integration (citation counts, influential citations)
+- AssessorAgent - Breakthrough detection (novelty, impact, evidence, significance)
+- CuratorAgent - Multi-signal scoring (interest match + social proof + citations + breakthrough)
+- Extended LangGraph workflow: discovery → reader → explainer → signals → assessor → curator
 
-**Value:** Discover important papers before citations accumulate
+**Value:** Discover important papers before citations accumulate, identify breakthrough research
+
+**Try it:**
+```bash
+# Run full pipeline with social signals and breakthrough detection
+python main.py --discover --days 3 --analyze --max-papers 10
+
+# View results in interactive explorer
+python main.py --explore
+```
 
 ---
 
