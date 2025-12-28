@@ -881,6 +881,601 @@ def run_analysis_pipeline() -> AgentState:
         raise
 
 
+# ============================================================================
+# Radar Workflow - Agentic Paper Monitoring (Milestone 4)
+# ============================================================================
+
+
+class RadarState(TypedDict):
+    """
+    State for the agentic radar workflow.
+
+    This state evolves across iterations as the workflow:
+    1. Tries different search strategies
+    2. Accumulates seen papers (to avoid re-processing)
+    3. Collects noteworthy papers for notification
+    4. Decides when to notify, expand search, or stop
+    """
+
+    # ========================================================================
+    # Strategy & Iteration Tracking
+    # ========================================================================
+
+    current_strategy: str
+    """Current search strategy being executed."""
+
+    strategies_tried: list[str]
+    """List of strategies already attempted this cycle."""
+
+    iterations: int
+    """Number of iterations completed."""
+
+    max_iterations: int
+    """Maximum iterations before stopping (prevents infinite loops)."""
+
+    # ========================================================================
+    # Paper Tracking
+    # ========================================================================
+
+    papers_seen: list[str]
+    """arXiv IDs of papers already processed (avoid duplicates)."""
+
+    current_papers: list[Paper] | None
+    """Papers found in current iteration."""
+
+    noteworthy_papers: list[Paper]
+    """Papers that meet notification threshold (accumulated)."""
+
+    # ========================================================================
+    # Thresholds
+    # ========================================================================
+
+    breakthrough_threshold: float
+    """Minimum breakthrough score to be noteworthy."""
+
+    relevance_threshold: float
+    """Minimum relevance score to be noteworthy."""
+
+    social_threshold: float
+    """Minimum social score for trending + relevant."""
+
+    # ========================================================================
+    # Results & Metadata
+    # ========================================================================
+
+    notification_sent: bool
+    """Whether a notification was sent."""
+
+    cycle_stats: dict
+    """Statistics for this radar cycle."""
+
+    errors: list[str]
+    """Errors encountered during execution."""
+
+
+# Expansion strategies in order of preference
+RADAR_STRATEGIES = [
+    "recent_2_days",
+    "recent_7_days",
+    "recent_14_days",
+    "trending_social",
+    "lower_threshold",
+]
+
+
+def strategy_agent_node(state: RadarState) -> RadarState:
+    """
+    StrategyAgent: Selects the next search strategy.
+
+    This agent decides which search strategy to use based on:
+    - What strategies have already been tried
+    - Whether we're in the first iteration or expanding
+    """
+    logger.info("🎯 StrategyAgent - Selecting search strategy...")
+
+    strategies_tried = state.get("strategies_tried", [])
+    iterations = state.get("iterations", 0)
+
+    # Find next untried strategy
+    next_strategy = None
+    for strategy in RADAR_STRATEGIES:
+        if strategy not in strategies_tried:
+            next_strategy = strategy
+            break
+
+    if next_strategy is None:
+        # All strategies exhausted, use last one
+        next_strategy = RADAR_STRATEGIES[-1]
+        logger.warning("All strategies exhausted, using fallback")
+
+    logger.info(f"Selected strategy: {next_strategy} (iteration {iterations + 1})")
+
+    state["current_strategy"] = next_strategy
+    state["iterations"] = iterations + 1
+
+    return state
+
+
+def scanner_agent_node(state: RadarState) -> RadarState:
+    """
+    ScannerAgent: Executes the search strategy.
+
+    This agent discovers papers based on the current strategy:
+    - recent_2_days: Last 2 days of arXiv papers
+    - recent_7_days: Last 7 days
+    - recent_14_days: Last 14 days
+    - trending_social: Focus on HN/Twitter trending papers
+    - lower_threshold: Use relaxed scoring thresholds
+    """
+    logger.info("🔍 ScannerAgent - Executing search...")
+
+    strategy = state.get("current_strategy", "recent_2_days")
+
+    try:
+        # Determine days_back based on strategy
+        days_map = {
+            "recent_2_days": 2,
+            "recent_7_days": 7,
+            "recent_14_days": 14,
+            "trending_social": 7,
+            "lower_threshold": 3,
+        }
+        days_back = days_map.get(strategy, 2)
+
+        # Run discovery pipeline
+        if strategy == "trending_social":
+            # Focus on social signals - get HN trending papers
+            from src.trackers.hackernews import fetch_hn_signals
+
+            hn_signals = fetch_hn_signals(days_back=days_back)
+            logger.info(f"Found {len(hn_signals)} papers with HN signals")
+
+            # Get papers from database that match these signals
+            arxiv_ids = [s.get("arxiv_id") for s in hn_signals if s.get("arxiv_id")]
+            with get_db_session() as db:
+                papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+            logger.info(f"Matched {len(papers)} papers from database")
+        else:
+            # Standard discovery
+            result = run_full_pipeline(days_back=days_back, max_papers=30)
+            papers = result.get("ranked_papers", []) or result.get("final_papers", []) or []
+
+        logger.info(f"✅ ScannerAgent found {len(papers)} papers")
+        state["current_papers"] = papers
+
+        # Update stats
+        if "cycle_stats" not in state or state["cycle_stats"] is None:
+            state["cycle_stats"] = {}
+        state["cycle_stats"][f"papers_found_{strategy}"] = len(papers)
+
+    except Exception as e:
+        logger.error(f"❌ ScannerAgent failed: {e}")
+        state["current_papers"] = []
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Scanner error: {e!s}")
+
+    return state
+
+
+def filter_agent_node(state: RadarState) -> RadarState:
+    """
+    FilterAgent: Removes duplicates and already-seen papers.
+
+    This agent:
+    - Filters out papers we've already processed
+    - Updates the papers_seen list
+    - Ensures no duplicate processing across iterations
+    """
+    logger.info("🔎 FilterAgent - Removing duplicates...")
+
+    current_papers = state.get("current_papers", []) or []
+    papers_seen = set(state.get("papers_seen", []))
+
+    # Filter out already-seen papers
+    new_papers = []
+    for paper in current_papers:
+        if paper.arxiv_id not in papers_seen:
+            new_papers.append(paper)
+            papers_seen.add(paper.arxiv_id)
+
+    filtered_count = len(current_papers) - len(new_papers)
+    logger.info(f"Filtered {filtered_count} duplicates, {len(new_papers)} new papers")
+
+    state["current_papers"] = new_papers
+    state["papers_seen"] = list(papers_seen)
+
+    return state
+
+
+def assessor_agent_node(state: RadarState) -> RadarState:
+    """
+    AssessorAgent: Evaluates papers for breakthrough potential.
+
+    This agent runs breakthrough assessment on unassessed papers
+    using the existing assessor functionality.
+    """
+    logger.info("🎯 AssessorAgent - Evaluating breakthrough potential...")
+
+    current_papers = state.get("current_papers", []) or []
+
+    if not current_papers:
+        logger.info("No papers to assess")
+        return state
+
+    try:
+        # Filter to papers that need assessment
+        unassessed = [p for p in current_papers if p.breakthrough_score is None]
+
+        if unassessed:
+            logger.info(f"Assessing {len(unassessed)} papers...")
+            assessed_papers, _ = assess_papers_batch(unassessed)
+            logger.info(f"✅ Assessed {len(assessed_papers)} papers")
+
+            # Merge back - create lookup by arxiv_id
+            assessed_map = {p.arxiv_id: p for p in assessed_papers}
+            for i, paper in enumerate(current_papers):
+                if paper.arxiv_id in assessed_map:
+                    current_papers[i] = assessed_map[paper.arxiv_id]
+        else:
+            logger.info("All papers already assessed")
+
+        state["current_papers"] = current_papers
+
+    except Exception as e:
+        logger.error(f"❌ AssessorAgent failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Assessor error: {e!s}")
+
+    return state
+
+
+def curator_agent_node(state: RadarState) -> RadarState:
+    """
+    CuratorAgent: Scores and ranks papers.
+
+    This agent applies multi-signal scoring using the existing curator.
+    """
+    logger.info("📊 CuratorAgent - Scoring and ranking...")
+
+    current_papers = state.get("current_papers", []) or []
+
+    if not current_papers:
+        logger.info("No papers to curate")
+        return state
+
+    try:
+        ranked_papers = curate_papers_batch(current_papers)
+        logger.info(f"✅ Curated {len(ranked_papers)} papers")
+
+        state["current_papers"] = ranked_papers
+
+    except Exception as e:
+        logger.error(f"❌ CuratorAgent failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Curator error: {e!s}")
+
+    return state
+
+
+def decision_agent_node(state: RadarState) -> RadarState:
+    """
+    DecisionAgent: Decides whether to notify, expand, or stop.
+
+    This agent evaluates papers against thresholds and determines:
+    - NOTIFY: Found noteworthy papers, send notification
+    - EXPAND: No noteworthy papers, try next strategy
+    - DONE: Exhausted strategies or max iterations, stop
+    """
+    logger.info("🤔 DecisionAgent - Evaluating findings...")
+
+    current_papers = state.get("current_papers", []) or []
+    noteworthy = list(state.get("noteworthy_papers", []))
+
+    breakthrough_threshold = state.get("breakthrough_threshold", 0.6)
+    relevance_threshold = state.get("relevance_threshold", 0.5)
+    social_threshold = state.get("social_threshold", 0.3)
+    current_strategy = state.get("current_strategy", "")
+
+    # Lower thresholds if using that strategy
+    if current_strategy == "lower_threshold":
+        breakthrough_threshold *= 0.8
+        relevance_threshold *= 0.8
+
+    # Check each paper for noteworthiness
+    for paper in current_papers:
+        is_noteworthy = False
+        reasons = []
+
+        # Check breakthrough
+        if paper.breakthrough_score and paper.breakthrough_score >= breakthrough_threshold:
+            is_noteworthy = True
+            reasons.append(f"breakthrough={paper.breakthrough_score:.0%}")
+
+        # Check high relevance
+        if paper.relevance_score and paper.relevance_score >= 0.8:
+            is_noteworthy = True
+            reasons.append(f"high_relevance={paper.relevance_score:.0%}")
+
+        # Check social + relevance combo
+        social_score = _get_social_score(paper)
+        if (
+            social_score >= social_threshold
+            and paper.relevance_score
+            and paper.relevance_score >= relevance_threshold
+        ):
+            is_noteworthy = True
+            reasons.append("trending+relevant")
+
+        if is_noteworthy:
+            logger.info(f"📌 Noteworthy: {paper.title[:50]}... ({', '.join(reasons)})")
+            noteworthy.append(paper)
+
+    state["noteworthy_papers"] = noteworthy
+
+    # Update strategies tried
+    strategies_tried = list(state.get("strategies_tried", []))
+    if current_strategy and current_strategy not in strategies_tried:
+        strategies_tried.append(current_strategy)
+    state["strategies_tried"] = strategies_tried
+
+    logger.info(f"Found {len(noteworthy)} noteworthy papers total")
+
+    return state
+
+
+def _get_social_score(paper: Paper) -> float:
+    """Calculate social score from paper's score components."""
+    if not paper.score_components:
+        return 0.0
+
+    hn_score = paper.score_components.get("hn_score", 0)
+    hn_comments = paper.score_components.get("hn_comments", 0)
+
+    score = 0.0
+    if hn_score > 200:
+        score += 0.30
+    elif hn_score > 100:
+        score += 0.20
+    elif hn_score > 50:
+        score += 0.10
+
+    if hn_comments > 100:
+        score += 0.15
+    elif hn_comments > 50:
+        score += 0.10
+    elif hn_comments > 20:
+        score += 0.05
+
+    return min(score, 0.5)
+
+
+def route_decision(state: RadarState) -> str:
+    """
+    Route from DecisionAgent to next node.
+
+    Returns:
+        "notify" - Found noteworthy papers
+        "expand" - No papers, try next strategy
+        "done" - Max iterations or strategies exhausted
+    """
+    noteworthy = state.get("noteworthy_papers", [])
+    iterations = state.get("iterations", 0)
+    max_iterations = state.get("max_iterations", 3)
+    strategies_tried = state.get("strategies_tried", [])
+
+    if noteworthy:
+        logger.info("Decision: NOTIFY - Found noteworthy papers")
+        return "notify"
+    elif iterations >= max_iterations:
+        logger.info("Decision: DONE - Max iterations reached")
+        return "done"
+    elif len(strategies_tried) >= len(RADAR_STRATEGIES):
+        logger.info("Decision: DONE - All strategies exhausted")
+        return "done"
+    else:
+        logger.info("Decision: EXPAND - Trying next strategy")
+        return "expand"
+
+
+def notifier_agent_node(state: RadarState) -> RadarState:
+    """
+    NotifierAgent: Sends notification for noteworthy papers.
+    """
+    logger.info("📧 NotifierAgent - Sending notification...")
+
+    from src.services.email_notifier import send_paper_notification
+
+    noteworthy = state.get("noteworthy_papers", [])
+
+    if not noteworthy:
+        logger.warning("No papers to notify about")
+        state["notification_sent"] = False
+        return state
+
+    try:
+        # Determine notification reason
+        breakthroughs = [
+            p
+            for p in noteworthy
+            if p.breakthrough_score
+            and p.breakthrough_score >= state.get("breakthrough_threshold", 0.6)
+        ]
+        reason = "breakthrough" if breakthroughs else "trending"
+
+        success = send_paper_notification(noteworthy, reason=reason)
+        state["notification_sent"] = success
+
+        if success:
+            logger.info(f"✅ Notification sent for {len(noteworthy)} papers")
+        else:
+            logger.warning("Failed to send notification")
+
+    except Exception as e:
+        logger.error(f"❌ NotifierAgent failed: {e}")
+        state["notification_sent"] = False
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Notifier error: {e!s}")
+
+    return state
+
+
+def log_agent_node(state: RadarState) -> RadarState:
+    """
+    LogAgent: Logs the cycle results when nothing was found.
+    """
+    logger.info("📝 LogAgent - Logging cycle results...")
+
+    iterations = state.get("iterations", 0)
+    strategies_tried = state.get("strategies_tried", [])
+    papers_seen = state.get("papers_seen", [])
+
+    logger.info(
+        f"Cycle complete: {iterations} iterations, {len(strategies_tried)} strategies tried"
+    )
+    logger.info(f"Papers scanned: {len(papers_seen)}")
+    logger.info(f"Strategies tried: {strategies_tried}")
+    logger.info("No noteworthy papers found this cycle")
+
+    return state
+
+
+def create_radar_workflow() -> StateGraph:
+    """
+    Create the agentic radar workflow.
+
+    This workflow implements an iterative search pattern:
+    1. StrategyAgent selects search strategy
+    2. ScannerAgent discovers papers
+    3. FilterAgent removes duplicates
+    4. AssessorAgent evaluates breakthrough potential
+    5. CuratorAgent scores and ranks
+    6. DecisionAgent routes to notify/expand/done
+    7. NotifierAgent or LogAgent handles the outcome
+
+    The workflow can loop back to StrategyAgent to try
+    additional strategies if nothing noteworthy is found.
+
+    Returns:
+        Compiled StateGraph ready to execute
+    """
+    logger.info("🏗️  Building agentic radar workflow...")
+
+    workflow = StateGraph(RadarState)
+
+    # Add agent nodes
+    workflow.add_node("strategy_agent", strategy_agent_node)
+    workflow.add_node("scanner_agent", scanner_agent_node)
+    workflow.add_node("filter_agent", filter_agent_node)
+    workflow.add_node("assessor_agent", assessor_agent_node)
+    workflow.add_node("curator_agent", curator_agent_node)
+    workflow.add_node("decision_agent", decision_agent_node)
+    workflow.add_node("notifier_agent", notifier_agent_node)
+    workflow.add_node("log_agent", log_agent_node)
+
+    # Define flow - Discovery phase
+    workflow.set_entry_point("strategy_agent")
+    workflow.add_edge("strategy_agent", "scanner_agent")
+    workflow.add_edge("scanner_agent", "filter_agent")
+
+    # Assessment phase
+    workflow.add_edge("filter_agent", "assessor_agent")
+    workflow.add_edge("assessor_agent", "curator_agent")
+    workflow.add_edge("curator_agent", "decision_agent")
+
+    # Decision phase - conditional routing
+    workflow.add_conditional_edges(
+        "decision_agent",
+        route_decision,
+        {
+            "notify": "notifier_agent",
+            "expand": "strategy_agent",  # Loop back
+            "done": "log_agent",
+        },
+    )
+
+    # Terminal nodes
+    workflow.add_edge("notifier_agent", END)
+    workflow.add_edge("log_agent", END)
+
+    app = workflow.compile()
+
+    logger.info("✅ Radar workflow built successfully!")
+    logger.info(
+        "Flow: Strategy → Scanner → Filter → Assessor → Curator → Decision → [Notify|Expand|Done]"
+    )
+
+    return app
+
+
+def run_radar_workflow(
+    max_iterations: int = 3,
+    breakthrough_threshold: float = 0.6,
+    relevance_threshold: float = 0.5,
+    social_threshold: float = 0.3,
+) -> RadarState:
+    """
+    Run the agentic radar workflow.
+
+    This is the main entry point for the radar system. It:
+    1. Creates the radar workflow
+    2. Initializes state with thresholds
+    3. Executes the iterative search
+    4. Returns final state with results
+
+    Args:
+        max_iterations: Maximum search iterations before stopping
+        breakthrough_threshold: Minimum breakthrough score for notification
+        relevance_threshold: Minimum relevance score for notification
+        social_threshold: Minimum social score for trending papers
+
+    Returns:
+        Final RadarState with all results
+    """
+    logger.info("🚀 Starting agentic radar workflow...")
+    logger.info(
+        f"Thresholds: breakthrough>{breakthrough_threshold}, relevance>{relevance_threshold}, social>{social_threshold}"
+    )
+
+    workflow = create_radar_workflow()
+
+    initial_state: RadarState = {
+        "current_strategy": "",
+        "strategies_tried": [],
+        "iterations": 0,
+        "max_iterations": max_iterations,
+        "papers_seen": [],
+        "current_papers": None,
+        "noteworthy_papers": [],
+        "breakthrough_threshold": breakthrough_threshold,
+        "relevance_threshold": relevance_threshold,
+        "social_threshold": social_threshold,
+        "notification_sent": False,
+        "cycle_stats": {},
+        "errors": [],
+    }
+
+    try:
+        final_state = workflow.invoke(initial_state)
+
+        logger.info("✅ Radar workflow complete!")
+        logger.info(f"Iterations: {final_state.get('iterations', 0)}")
+        logger.info(f"Noteworthy papers: {len(final_state.get('noteworthy_papers', []))}")
+        logger.info(f"Notification sent: {final_state.get('notification_sent', False)}")
+
+        if final_state.get("errors"):
+            logger.warning(f"Errors encountered: {final_state['errors']}")
+
+        return final_state
+
+    except Exception as e:
+        logger.error(f"❌ Radar workflow failed: {e}")
+        raise
+
+
 if __name__ == "__main__":
     # Test the workflow
     print("Testing LangGraph Workflow...")

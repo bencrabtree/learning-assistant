@@ -339,7 +339,7 @@ python main.py --explore
 ---
 
 ### Milestone 3: Research Radar Daemon
-**Status:** 🔄 In Progress (PR #14)
+**Status:** ✅ Complete
 
 **Delivers:** Background monitoring with email notifications for important papers
 
@@ -355,18 +355,60 @@ python main.py --explore
 ---
 
 ### Milestone 4: Agentic LangGraph Workflow
-**Status:** 📋 Planned
+**Status:** 🔄 In Progress
 
-**Delivers:** Truly agentic radar using LangGraph patterns
+**Delivers:** Truly agentic radar using LangGraph patterns with 8 specialized agents
 
 **Key features:**
 - Radar loop as a LangGraph workflow with conditional edges
-- Runtime decision-making (notify vs expand search)
-- Iterative search with expansion strategies
-- State accumulation across iterations
+- 8 specialized agents (Strategy, Scanner, Filter, Assessor, Curator, Decision, Notifier, Log)
+- Runtime decision-making (notify vs expand vs done)
+- Iterative search with multiple expansion strategies
+- State accumulation across iterations (papers_seen, strategies_tried)
 - Autonomous graph-based decision making
 
-**Value:** Learn core LangGraph patterns (conditional routing, state evolution)
+**Agentic Workflow Architecture:**
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    AGENTIC RADAR WORKFLOW                          │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  ┌──────────────── DISCOVERY PHASE ────────────────┐               │
+│  │                                                  │               │
+│  │  START → StrategyAgent → ScannerAgent → FilterAgent             │
+│  │              │                              │    │               │
+│  │         (selects          (arxiv +     (dedup)  │               │
+│  │          strategy)         signals)             │               │
+│  └──────────────────────────────────────────────────┘               │
+│                              │                                      │
+│  ┌──────────────── ASSESSMENT PHASE ───────────────┐               │
+│  │                              ▼                   │               │
+│  │         AssessorAgent ────────► CuratorAgent    │               │
+│  │              │                       │          │               │
+│  │         (breakthrough            (scoring &    │               │
+│  │          detection)               ranking)      │               │
+│  └──────────────────────────────────────────────────┘               │
+│                              │                                      │
+│  ┌──────────────── DECISION PHASE ─────────────────┐               │
+│  │                              ▼                   │               │
+│  │                      DecisionAgent              │               │
+│  │                           │                      │               │
+│  │              ┌────────────┼────────────┐        │               │
+│  │              ▼            ▼            ▼        │               │
+│  │          [NOTIFY]    [EXPAND]      [DONE]      │               │
+│  │              │            │            │        │               │
+│  │              ▼            │            ▼        │               │
+│  │       NotifierAgent   (loop)     LogAgent      │               │
+│  │              │            │            │        │               │
+│  │              ▼            │            ▼        │               │
+│  │            END      back to        END         │               │
+│  │                     Strategy                    │               │
+│  └──────────────────────────────────────────────────┘               │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Value:** Learn core LangGraph patterns (conditional routing, state evolution, agent composition)
 
 ---
 

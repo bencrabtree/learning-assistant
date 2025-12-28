@@ -1,14 +1,17 @@
 """
 Research Radar Daemon - Background paper monitoring system.
 
-This daemon runs continuously, scanning for noteworthy papers and
-sending notifications when something important is discovered.
+This daemon runs continuously, invoking the agentic radar workflow
+to scan for noteworthy papers and send notifications.
 
 Key features:
 - Runs on a configurable schedule (e.g., every 3 hours, 5am-8pm EST)
-- Scans both new papers AND rising/trending older papers
-- Uses an agentic loop: discover → assess → decide → notify (or continue)
+- Uses LangGraph agentic workflow with 8 specialized agents
+- Iterative search with multiple expansion strategies
 - Only notifies when papers meet threshold criteria
+
+The heavy lifting is done by the agentic radar workflow in graph.py.
+This daemon just handles scheduling and lifecycle management.
 """
 
 import signal
@@ -19,22 +22,21 @@ from zoneinfo import ZoneInfo
 
 from loguru import logger
 
-from src.agents.assessor import assess_papers_batch
-from src.agents.curator import CuratorAgent
 from src.config import settings
-from src.database import get_db_session
-from src.graph import run_full_pipeline
-from src.models.paper import Paper
-from src.services.email_notifier import send_paper_notification
-from src.trackers.hackernews import fetch_hn_signals
+from src.graph import run_radar_workflow
 
 
 class ResearchRadar:
     """
     Background research monitoring daemon.
 
-    Implements an agentic loop that continuously searches for
-    noteworthy papers and notifies the user when found.
+    This is a thin wrapper that:
+    1. Manages the daemon lifecycle (start/stop)
+    2. Handles scheduling (when to run)
+    3. Invokes the agentic radar workflow
+
+    The actual paper discovery, assessment, and notification
+    is handled by the LangGraph workflow in graph.py.
     """
 
     def __init__(self):
@@ -44,22 +46,23 @@ class ResearchRadar:
         self.end_hour = settings.radar_end_hour
         self.timezone = ZoneInfo(settings.radar_timezone)
 
-        # Notification thresholds (aggressive = lower values)
+        # Notification thresholds (passed to workflow)
         self.breakthrough_threshold = settings.notify_breakthrough_threshold
         self.social_threshold = settings.notify_social_threshold
         self.relevance_threshold = settings.notify_relevance_threshold
 
         self.running = False
-        self.curator = CuratorAgent()
 
     def start(self) -> None:
         """Start the radar daemon."""
         logger.info("🔬 Research Radar starting...")
         logger.info(
-            f"Schedule: Every {self.interval_hours}h, {self.start_hour}:00-{self.end_hour}:00 {settings.radar_timezone}"
+            f"Schedule: Every {self.interval_hours}h, "
+            f"{self.start_hour}:00-{self.end_hour}:00 {settings.radar_timezone}"
         )
         logger.info(
-            f"Thresholds: breakthrough>{self.breakthrough_threshold}, social>{self.social_threshold}, relevance>{self.relevance_threshold}"
+            f"Thresholds: breakthrough>{self.breakthrough_threshold}, "
+            f"social>{self.social_threshold}, relevance>{self.relevance_threshold}"
         )
 
         self.running = True
@@ -99,235 +102,70 @@ class ResearchRadar:
         Run a single scan cycle (useful for testing).
 
         Returns:
-            Dict with scan results
+            Dict with scan results from the workflow
         """
         return self._run_scan_cycle()
 
     def _run_scan_cycle(self) -> dict:
         """
-        Execute one full scan cycle.
+        Execute one full scan cycle using the agentic workflow.
 
-        This is the core agentic loop:
-        1. Discover new papers (last 1-2 days)
-        2. Find rising papers (older but trending)
-        3. Assess all for breakthrough potential
-        4. Score and rank by relevance
-        5. Filter to noteworthy papers
-        6. Notify if any found
+        This invokes the LangGraph radar workflow which:
+        1. StrategyAgent - Selects search strategy
+        2. ScannerAgent - Discovers papers
+        3. FilterAgent - Removes duplicates
+        4. AssessorAgent - Evaluates breakthrough potential
+        5. CuratorAgent - Scores and ranks
+        6. DecisionAgent - Routes to notify/expand/done
+        7. NotifierAgent - Sends notification (if noteworthy found)
+        8. LogAgent - Logs results (if nothing found)
 
         Returns:
             Dict with cycle results
         """
         logger.info("=" * 60)
-        logger.info("🔍 Starting scan cycle...")
+        logger.info("🔍 Starting agentic scan cycle...")
         cycle_start = datetime.now(self.timezone)
 
-        results = {
-            "timestamp": cycle_start.isoformat(),
-            "new_papers": 0,
-            "rising_papers": 0,
-            "noteworthy_papers": 0,
-            "notifications_sent": 0,
-            "errors": [],
-        }
-
         try:
-            # Step 1: Discover new papers (last 2 days)
-            logger.info("Step 1: Discovering new papers...")
-            new_papers = self._discover_new_papers()
-            results["new_papers"] = len(new_papers)
-            logger.info(f"Found {len(new_papers)} new papers")
+            # Run the agentic radar workflow
+            result = run_radar_workflow(
+                max_iterations=3,
+                breakthrough_threshold=self.breakthrough_threshold,
+                relevance_threshold=self.relevance_threshold,
+                social_threshold=self.social_threshold,
+            )
 
-            # Step 2: Find rising/trending older papers
-            logger.info("Step 2: Scanning for rising papers...")
-            rising_papers = self._find_rising_papers()
-            results["rising_papers"] = len(rising_papers)
-            logger.info(f"Found {len(rising_papers)} rising papers")
+            # Convert workflow state to results dict
+            results = {
+                "timestamp": cycle_start.isoformat(),
+                "iterations": result.get("iterations", 0),
+                "strategies_tried": result.get("strategies_tried", []),
+                "papers_scanned": len(result.get("papers_seen", [])),
+                "noteworthy_papers": len(result.get("noteworthy_papers", [])),
+                "notification_sent": result.get("notification_sent", False),
+                "errors": result.get("errors", []),
+            }
 
-            # Combine all candidates
-            all_candidates = new_papers + rising_papers
+            duration = (datetime.now(self.timezone) - cycle_start).total_seconds()
+            logger.info(f"Scan cycle complete in {duration:.1f}s")
+            logger.info(f"Results: {results}")
+            logger.info("=" * 60)
 
-            if not all_candidates:
-                logger.info("No candidates found this cycle")
-                return results
-
-            # Step 3: Filter to noteworthy papers
-            logger.info("Step 3: Filtering to noteworthy papers...")
-            noteworthy = self._filter_noteworthy(all_candidates)
-            results["noteworthy_papers"] = len(noteworthy)
-
-            if noteworthy:
-                logger.info(f"🎯 Found {len(noteworthy)} noteworthy papers!")
-
-                # Step 4: Send notifications
-                logger.info("Step 4: Sending notifications...")
-                if self._notify(noteworthy):
-                    results["notifications_sent"] = len(noteworthy)
-                    logger.info(f"✅ Sent notification for {len(noteworthy)} papers")
-                else:
-                    logger.warning("Failed to send notification")
-            else:
-                logger.info("No papers met notification threshold this cycle")
+            return results
 
         except Exception as e:
             logger.error(f"Scan cycle error: {e}")
-            results["errors"].append(str(e))
-
-        duration = (datetime.now(self.timezone) - cycle_start).total_seconds()
-        logger.info(f"Scan cycle complete in {duration:.1f}s")
-        logger.info("=" * 60)
-
-        return results
-
-    def _discover_new_papers(self) -> list[Paper]:
-        """
-        Discover new papers from the last 1-2 days.
-
-        Uses the full pipeline but limits to recent papers.
-        """
-        try:
-            result = run_full_pipeline(days_back=2, max_papers=20)
-
-            if result.get("errors"):
-                for error in result["errors"]:
-                    logger.warning(f"Pipeline warning: {error}")
-
-            return result.get("ranked_papers", []) or result.get("final_papers", []) or []
-
-        except Exception as e:
-            logger.error(f"Discovery failed: {e}")
-            return []
-
-    def _find_rising_papers(self) -> list[Paper]:
-        """
-        Find older papers that are gaining traction.
-
-        Scans social signals for papers from the last 30 days
-        that are currently being discussed.
-        """
-        try:
-            # Get HN signals from last 7 days (captures rising old papers)
-            hn_signals = fetch_hn_signals(days_back=7)
-
-            if not hn_signals:
-                return []
-
-            # Find papers that are older but trending now
-            rising = []
-            with get_db_session() as db:
-                for hn_signal in hn_signals:
-                    arxiv_id = hn_signal.get("arxiv_id")
-                    if not arxiv_id:
-                        continue
-
-                    # Check if we have this paper
-                    paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
-
-                    if paper:
-                        # Update social signals
-                        if paper.score_components is None:
-                            paper.score_components = {}
-                        paper.score_components["hn_score"] = hn_signal.get("score", 0)
-                        paper.score_components["hn_comments"] = hn_signal.get("comments_count", 0)
-
-                        # Check if it's "rising" (older than 3 days but getting attention)
-                        age_days = (datetime.now() - paper.published_date.replace(tzinfo=None)).days
-                        if age_days > 3 and hn_signal.get("score", 0) > 50:
-                            rising.append(paper)
-
-                db.commit()
-
-            # Assess rising papers if not already assessed
-            if rising:
-                unassessed = [p for p in rising if p.breakthrough_score is None]
-                if unassessed:
-                    assess_papers_batch(unassessed)
-
-                # Score them
-                self.curator.score_papers(rising)
-
-            return rising
-
-        except Exception as e:
-            logger.error(f"Rising paper scan failed: {e}")
-            return []
-
-    def _filter_noteworthy(self, papers: list[Paper]) -> list[Paper]:
-        """
-        Filter papers to only those worth notifying about.
-
-        A paper is noteworthy if ANY of:
-        - Breakthrough score > threshold
-        - Social score > threshold AND relevance > threshold
-        - Relevance score very high (> 0.8)
-        """
-        noteworthy = []
-
-        for paper in papers:
-            reasons = []
-
-            # Check breakthrough
-            if paper.breakthrough_score and paper.breakthrough_score >= self.breakthrough_threshold:
-                reasons.append(f"breakthrough={paper.breakthrough_score:.0%}")
-
-            # Check social proof + relevance combo
-            social_score = self._get_social_score(paper)
-            if (
-                social_score >= self.social_threshold
-                and paper.relevance_score
-                and paper.relevance_score >= self.relevance_threshold
-            ):
-                reasons.append(
-                    f"trending+relevant (social={social_score:.0%}, rel={paper.relevance_score:.0%})"
-                )
-
-            # Check very high relevance
-            if paper.relevance_score and paper.relevance_score >= 0.8:
-                reasons.append(f"high_relevance={paper.relevance_score:.0%}")
-
-            if reasons:
-                logger.info(f"📌 Noteworthy: {paper.title[:50]}... ({', '.join(reasons)})")
-                noteworthy.append(paper)
-
-        return noteworthy
-
-    def _get_social_score(self, paper: Paper) -> float:
-        """Calculate social score from paper's score components."""
-        if not paper.score_components:
-            return 0.0
-
-        hn_score = paper.score_components.get("hn_score", 0)
-        hn_comments = paper.score_components.get("hn_comments", 0)
-
-        # Simple scoring rubric
-        score = 0.0
-        if hn_score > 200:
-            score += 0.30
-        elif hn_score > 100:
-            score += 0.20
-        elif hn_score > 50:
-            score += 0.10
-
-        if hn_comments > 100:
-            score += 0.15
-        elif hn_comments > 50:
-            score += 0.10
-        elif hn_comments > 20:
-            score += 0.05
-
-        return min(score, 0.5)  # Cap at 0.5
-
-    def _notify(self, papers: list[Paper]) -> bool:
-        """Send notification for noteworthy papers."""
-        # Determine primary reason for notification
-        breakthroughs = [
-            p
-            for p in papers
-            if p.breakthrough_score and p.breakthrough_score >= self.breakthrough_threshold
-        ]
-        if breakthroughs:
-            return send_paper_notification(papers, reason="breakthrough")
-        return send_paper_notification(papers, reason="trending")
+            logger.exception("Full traceback:")
+            return {
+                "timestamp": cycle_start.isoformat(),
+                "iterations": 0,
+                "strategies_tried": [],
+                "papers_scanned": 0,
+                "noteworthy_papers": 0,
+                "notification_sent": False,
+                "errors": [str(e)],
+            }
 
     def _is_within_schedule(self) -> bool:
         """Check if current time is within the scheduled window."""
