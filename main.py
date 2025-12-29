@@ -559,6 +559,126 @@ def handle_test_email(args):
 
 
 # ============================================================================
+# Favorites/Personalization Command Handlers
+# ============================================================================
+
+
+def handle_like(args):
+    """
+    Mark a paper as a favorite/seed paper for personalization.
+
+    Example:
+        python main.py --like 2312.12345
+    """
+    from datetime import UTC, datetime
+
+    from src.models.paper import Paper
+
+    arxiv_id = args.like
+    logger.info(f"Marking paper as favorite: {arxiv_id}")
+
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    with get_db_session() as db:
+        paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+
+        if not paper:
+            logger.error(f"Paper not found: {arxiv_id}")
+            logger.info("Use --list to see available papers, or --discover to find new ones")
+            sys.exit(1)
+
+        if paper.is_favorite:
+            logger.info(f"Paper is already a favorite: {paper.title}")
+            return
+
+        paper.is_favorite = True
+        paper.favorited_at = datetime.now(UTC)
+
+    logger.info(f"Marked as favorite: {paper.title[:60]}...")
+    print(f"\n⭐ Added to favorites: {paper.title}")
+    print(f"   ArXiv ID: {arxiv_id}")
+    print("   Use --favorites to see all your seed papers\n")
+
+
+def handle_unlike(args):
+    """
+    Remove a paper from favorites.
+
+    Example:
+        python main.py --unlike 2312.12345
+    """
+    from src.models.paper import Paper
+
+    arxiv_id = args.unlike
+    logger.info(f"Removing paper from favorites: {arxiv_id}")
+
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    with get_db_session() as db:
+        paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+
+        if not paper:
+            logger.error(f"Paper not found: {arxiv_id}")
+            sys.exit(1)
+
+        if not paper.is_favorite:
+            logger.info(f"Paper is not a favorite: {paper.title}")
+            return
+
+        paper.is_favorite = False
+        paper.favorited_at = None
+
+    logger.info(f"Removed from favorites: {paper.title[:60]}...")
+    print(f"\n✓ Removed from favorites: {paper.title}\n")
+
+
+def handle_favorites(args):
+    """
+    List all favorite/seed papers.
+
+    Example:
+        python main.py --favorites
+    """
+    from src.models.paper import Paper
+
+    logger.info("Listing favorite papers...")
+
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    with get_db_session() as db:
+        favorites = (
+            db.query(Paper).filter_by(is_favorite=True).order_by(Paper.favorited_at.desc()).all()
+        )
+
+        if not favorites:
+            print("\n⭐ No favorite papers yet.")
+            print("Use --like <arxiv_id> to mark papers you like")
+            print("These seed papers will help personalize recommendations\n")
+            return
+
+        print("\n" + "=" * 80)
+        print(f"⭐ FAVORITE PAPERS ({len(favorites)} total)")
+        print("=" * 80)
+
+        for i, paper in enumerate(favorites, 1):
+            favorited_date = paper.favorited_at.strftime("%Y-%m-%d") if paper.favorited_at else "?"
+            print(f"\n{i}. {paper.title}")
+            print(f"   ArXiv: {paper.arxiv_id} | Favorited: {favorited_date}")
+            if paper.categories:
+                print(f"   Categories: {', '.join(paper.categories[:3])}")
+
+        print("\n" + "=" * 80)
+        print("These papers help personalize your recommendations.")
+        print("Use --unlike <arxiv_id> to remove a paper from favorites.\n")
+
+
+# ============================================================================
 # Utilities
 # ============================================================================
 
@@ -622,6 +742,11 @@ Examples:
   # Export data as JSON
   python main.py --list --format json              # Export list as JSON
   python main.py --show 2512.18878v1 --format json # Export paper details as JSON
+
+  # Personalization - mark favorite papers as seeds
+  python main.py --like 2312.12345                 # Mark paper as favorite
+  python main.py --unlike 2312.12345               # Remove from favorites
+  python main.py --favorites                       # List all favorite papers
 
   # Reset everything
   python main.py --init-db --reset --yes
@@ -704,6 +829,28 @@ Examples:
         help="Test email configuration",
     )
 
+    # ==================== PERSONALIZATION COMMANDS ====================
+    pref_group = parser.add_argument_group(
+        "Personalization", "Mark favorite papers as seeds for recommendations"
+    )
+    pref_group.add_argument(
+        "--like",
+        type=str,
+        metavar="ARXIV_ID",
+        help="Mark a paper as a favorite/seed paper for personalization",
+    )
+    pref_group.add_argument(
+        "--unlike",
+        type=str,
+        metavar="ARXIV_ID",
+        help="Remove a paper from favorites",
+    )
+    pref_group.add_argument(
+        "--favorites",
+        action="store_true",
+        help="List all favorite/seed papers",
+    )
+
     # ==================== OTHER OPTIONS ====================
     other_group = parser.add_argument_group("Other")
     other_group.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -743,6 +890,12 @@ Examples:
             handle_radar_once(args)
         elif args.test_email:
             handle_test_email(args)
+        elif args.like:
+            handle_like(args)
+        elif args.unlike:
+            handle_unlike(args)
+        elif args.favorites:
+            handle_favorites(args)
         else:
             # No command specified, show help
             parser.print_help()
