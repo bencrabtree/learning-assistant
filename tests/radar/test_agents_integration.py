@@ -237,10 +237,102 @@ class TestCuratorAgentIntegration:
 
         assert len(result["current_papers"]) == 2
 
+    def test_uses_precalculated_social_scores(self):
+        """Test that curator uses hn_social_score from score_components.
+
+        This test verifies the data format contract: curator should read
+        pre-calculated social scores, not recalculate from raw data.
+        """
+        from src.agents.curator import CuratorAgent
+
+        paper = create_test_paper(
+            score_components={
+                "hn_social_score": 0.45,  # Pre-calculated
+                "twitter_social_score": 0.0,
+                "hn_score": 250,  # Raw - should be ignored for scoring
+                "hn_comments": 120,  # Raw - should be ignored for scoring
+            },
+        )
+
+        curator = CuratorAgent(interests=[])
+        social_score = curator.calculate_social_score(paper)
+
+        # Should use pre-calculated hn_social_score (0.45)
+        assert social_score == 0.45
+
+    def test_uses_max_of_hn_and_twitter_scores(self):
+        """Test that curator takes max of HN and Twitter social scores."""
+        from src.agents.curator import CuratorAgent
+
+        paper = create_test_paper(
+            score_components={
+                "hn_social_score": 0.2,
+                "twitter_social_score": 0.4,  # Higher - should be used
+            },
+        )
+
+        curator = CuratorAgent(interests=[])
+        social_score = curator.calculate_social_score(paper)
+
+        # Should return max(0.2, 0.4) = 0.4
+        assert social_score == 0.4
+
 
 @pytest.mark.integration
 class TestDecisionAgentIntegration:
     """Integration tests for DecisionAgent."""
+
+    def test_uses_precalculated_social_scores(self):
+        """Test that decision agent uses hn_social_score and twitter_social_score.
+
+        This test verifies the data format contract: the signal node stores
+        pre-calculated scores in score_components, and decision agent should
+        use these instead of recalculating from raw data.
+        """
+        paper = create_test_paper(
+            breakthrough_score=0.3,  # Below threshold
+            relevance_score=0.6,  # Above relevance threshold when combined
+            score_components={
+                "hn_social_score": 0.4,  # Above social threshold (0.3)
+                "twitter_social_score": 0.0,
+                "hn_score": 150,  # Raw data - should NOT be used for scoring
+                "hn_comments": 50,
+            },
+        )
+        state = create_test_state(
+            current_papers=[paper],
+            current_strategy="recent_2_days",
+            social_threshold=0.3,
+            relevance_threshold=0.5,
+        )
+
+        result = decision_agent_node(state)
+
+        # Paper should be noteworthy because social (0.4) >= threshold (0.3)
+        # AND relevance (0.6) >= threshold (0.5) = "trending+relevant"
+        assert len(result["noteworthy_papers"]) == 1
+
+    def test_uses_twitter_social_score_when_higher(self):
+        """Test that decision agent takes max of HN and Twitter social scores."""
+        paper = create_test_paper(
+            breakthrough_score=0.3,
+            relevance_score=0.6,
+            score_components={
+                "hn_social_score": 0.1,  # Low HN
+                "twitter_social_score": 0.5,  # High Twitter - should be used
+            },
+        )
+        state = create_test_state(
+            current_papers=[paper],
+            current_strategy="recent_2_days",
+            social_threshold=0.4,  # Twitter score meets this
+            relevance_threshold=0.5,
+        )
+
+        result = decision_agent_node(state)
+
+        # Should be noteworthy via Twitter social score (0.5 >= 0.4)
+        assert len(result["noteworthy_papers"]) == 1
 
     def test_identifies_breakthrough_paper(self):
         """Test that high breakthrough score paper is marked noteworthy."""
