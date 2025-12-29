@@ -56,15 +56,24 @@ def scanner_agent_node(state: RadarState) -> RadarState:
         # Run discovery pipeline
         if strategy == "trending_social":
             # Focus on social signals - get HN trending papers
+            from sqlalchemy import or_
+
             from src.trackers.hackernews import fetch_hn_signals
 
             hn_signals = fetch_hn_signals(days_back=days_back)
             logger.info(f"Found {len(hn_signals)} papers with HN signals")
 
             # Get papers from database that match these signals
+            # HN strips version (2512.14693), DB has version (2512.14693v1)
+            # Use LIKE matching to handle version suffix
             arxiv_ids = [s.get("arxiv_id") for s in hn_signals if s.get("arxiv_id")]
             with get_db_session() as db:
-                papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+                if arxiv_ids:
+                    # Match papers where arxiv_id starts with any of the HN ids
+                    conditions = [Paper.arxiv_id.like(f"{aid}%") for aid in arxiv_ids]
+                    papers = db.query(Paper).filter(or_(*conditions)).all()
+                else:
+                    papers = []
             logger.info(f"Matched {len(papers)} papers from database")
         else:
             # Standard discovery - import here to avoid circular imports
