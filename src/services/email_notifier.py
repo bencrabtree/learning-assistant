@@ -96,6 +96,17 @@ class EmailNotifier:
         papers_html = ""
         for i, paper in enumerate(papers, 1):
             scores = self._format_scores(paper)
+            reasons = self._format_reasons(paper)
+
+            # Build reasons section if we have reasons
+            reasons_html = ""
+            if reasons:
+                reasons_html = f"""
+                <div style="margin: 12px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 13px; color: #555;">
+                    <strong>Why this paper?</strong> {reasons}
+                </div>
+                """
+
             papers_html += f"""
             <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
                 <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
@@ -107,6 +118,7 @@ class EmailNotifier:
                 <p style="margin: 0 0 12px 0; color: #444; font-size: 14px;">
                     {paper.eli5_summary or paper.abstract[:300]}{'...' if len(paper.abstract) > 300 else ''}
                 </p>
+                {reasons_html}
                 <div style="font-size: 13px; color: #888;">
                     {scores}
                 </div>
@@ -152,30 +164,92 @@ class EmailNotifier:
         ]
 
         for i, paper in enumerate(papers, 1):
-            lines.extend(
-                [
-                    f"{i}. {paper.title}",
-                    f"   Authors: {', '.join(paper.authors[:3])}",
-                    f"   {self._format_scores(paper)}",
-                    f"   Link: {paper.abstract_url}",
-                    "",
-                ]
-            )
+            reasons = self._format_reasons(paper)
+            paper_lines = [
+                f"{i}. {paper.title}",
+                f"   Authors: {', '.join(paper.authors[:3])}",
+                f"   {self._format_scores(paper)}",
+            ]
+            if reasons:
+                paper_lines.append(f"   Why this paper? {reasons}")
+            paper_lines.extend([f"   Link: {paper.abstract_url}", ""])
+            lines.extend(paper_lines)
 
         return "\n".join(lines)
 
     def _format_scores(self, paper: Paper) -> str:
-        """Format paper scores for display."""
+        """Format paper scores for display with trending icons."""
         scores = []
+
+        # Breakthrough score with icon
         if paper.breakthrough_score is not None:
-            scores.append(f"Breakthrough: {paper.breakthrough_score:.0%}")
+            if paper.breakthrough_score >= 0.8:
+                scores.append(f"🚀 Breakthrough: {paper.breakthrough_score:.0%}")
+            else:
+                scores.append(f"Breakthrough: {paper.breakthrough_score:.0%}")
+
+        # Relevance score
         if paper.relevance_score is not None:
             scores.append(f"Relevance: {paper.relevance_score:.0%}")
+
+        # HN score with trending icons
         if paper.score_components:
-            hn = paper.score_components.get("hn_score", 0)
-            if hn:
-                scores.append(f"HN: {hn} pts")
+            hn_score = paper.score_components.get("hn_score", 0)
+            hn_comments = paper.score_components.get("hn_comments", 0)
+            if hn_score:
+                if hn_score >= 100:
+                    icon = "🔥"  # Hot/trending
+                elif hn_score >= 50:
+                    icon = "📈"  # Rising
+                else:
+                    icon = ""
+                hn_text = f"{icon} HN: {hn_score} pts" if icon else f"HN: {hn_score} pts"
+                if hn_comments:
+                    hn_text += f" ({hn_comments} comments)"
+                scores.append(hn_text.strip())
+
+            # Twitter score if present
+            twitter_score = paper.score_components.get("twitter_score", 0)
+            if twitter_score:
+                scores.append(f"Twitter: {twitter_score}")
+
         return " | ".join(scores) if scores else "New discovery"
+
+    def _format_reasons(self, paper: Paper) -> str:
+        """Generate 'Why this paper?' explanation."""
+        reasons = []
+
+        # Breakthrough potential
+        if paper.breakthrough_score is not None and paper.breakthrough_score >= 0.8:
+            reasons.append("High breakthrough potential")
+        elif paper.breakthrough_score is not None and paper.breakthrough_score >= 0.6:
+            reasons.append("Notable breakthrough potential")
+
+        # High relevance
+        if paper.relevance_score is not None and paper.relevance_score >= 0.8:
+            reasons.append("Highly relevant to your interests")
+        elif paper.relevance_score is not None and paper.relevance_score >= 0.6:
+            reasons.append("Matches your interests")
+
+        # Social signals
+        if paper.score_components:
+            hn_score = paper.score_components.get("hn_score", 0)
+            if hn_score >= 100:
+                reasons.append(f"Trending on HN ({hn_score} pts)")
+            elif hn_score >= 50:
+                reasons.append(f"Discussed on HN ({hn_score} pts)")
+
+            twitter_score = paper.score_components.get("twitter_score", 0)
+            if twitter_score >= 100:
+                reasons.append(f"Viral on Twitter ({twitter_score})")
+
+        # Interest match from score components
+        if paper.score_components:
+            interest_match = paper.score_components.get("interest_match", 0)
+            if interest_match > 0.7:
+                reasons.append("Strong match with your research areas")
+
+        return " • ".join(reasons) if reasons else ""
 
     def _send_email(self, msg: MIMEMultipart) -> None:
         """Send the email via SMTP."""
