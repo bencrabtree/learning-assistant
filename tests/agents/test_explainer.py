@@ -348,7 +348,8 @@ class TestExplainerAgent:
                 mock_get_client.return_value = mock_client
 
                 explainer = ExplainerAgent()
-                count = explainer.explain_and_save(papers)
+                # Use max_workers=1 to avoid SQLite threading issues in tests
+                count = explainer.explain_and_save(papers, max_workers=1)
 
                 assert count == 2
                 assert mock_client.chat_json.call_count == 2
@@ -395,7 +396,8 @@ class TestStandaloneFunctions:
                 mock_client.chat_json.return_value = mock_explanation_response
                 mock_get_client.return_value = mock_client
 
-                updated_papers = explain_papers_batch(papers)
+                # Use max_workers=1 to avoid SQLite threading issues in tests
+                updated_papers = explain_papers_batch(papers, max_workers=1)
 
                 assert len(updated_papers) == 2
                 assert all(p.explained_at is not None for p in updated_papers)
