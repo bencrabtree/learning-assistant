@@ -558,6 +558,19 @@ def handle_test_email(args):
         sys.exit(1)
 
 
+def handle_feedback_server(args):
+    """
+    Start the feedback server for collecting email feedback.
+
+    Example:
+        python main.py --feedback-server
+    """
+    from src.services.feedback_server import run_feedback_server
+
+    port = getattr(args, "feedback_port", None)
+    run_feedback_server(port=port)
+
+
 # ============================================================================
 # Favorites/Personalization Command Handlers
 # ============================================================================
@@ -828,6 +841,17 @@ Examples:
         action="store_true",
         help="Test email configuration",
     )
+    radar_group.add_argument(
+        "--feedback-server",
+        action="store_true",
+        help="Start the feedback server for collecting email ratings",
+    )
+    radar_group.add_argument(
+        "--feedback-port",
+        type=int,
+        default=None,
+        help="Port for feedback server (default: 8080)",
+    )
 
     # ==================== PERSONALIZATION COMMANDS ====================
     pref_group = parser.add_argument_group(
@@ -896,6 +920,8 @@ Examples:
             handle_unlike(args)
         elif args.favorites:
             handle_favorites(args)
+        elif args.feedback_server:
+            handle_feedback_server(args)
         else:
             # No command specified, show help
             parser.print_help()
