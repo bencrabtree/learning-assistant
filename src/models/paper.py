@@ -18,7 +18,7 @@ Why ORM?
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # ============================================================================
@@ -193,6 +193,17 @@ class Paper(Base):
     assessed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
+    # User Preference Fields - For personalization
+    # ------------------------------------------------------------------------
+    # Seed papers that the user explicitly likes for training recommendations
+
+    # Whether the user has marked this as a favorite/seed paper
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # When the user favorited this paper
+    favorited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ------------------------------------------------------------------------
     # Relationships - Links to other tables
     # ------------------------------------------------------------------------
     # SQLAlchemy relationships let us easily access related data
@@ -226,6 +237,7 @@ Index("idx_published_date", Paper.published_date)
 Index("idx_relevance_score", Paper.relevance_score)
 Index("idx_discovered_at", Paper.discovered_at)
 Index("idx_breakthrough_score", Paper.breakthrough_score)
+Index("idx_is_favorite", Paper.is_favorite)
 
 
 # ============================================================================
@@ -381,6 +393,9 @@ class ReadingProgress(Base):
     # User feedback
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Where the feedback came from: "email", "cli", "tui"
+    feedback_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # How long they spent reading (in minutes)
     time_spent_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
