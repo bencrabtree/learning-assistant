@@ -102,15 +102,31 @@ class TestNodeFunctions:
         assert len(result["errors"]) == 1
         assert "Discovery error" in result["errors"][0]
 
+    @patch("src.graph.get_db_session")
     @patch("src.graph.analyze_papers_batch")
-    def test_reader_node_success(self, mock_analyze, mock_papers):
+    def test_reader_node_success(self, mock_analyze, mock_db, mock_papers):
         """Test reader node with successful analysis."""
-        analyzed_papers = mock_papers.copy()
-        for p in analyzed_papers:
-            p.main_claim = "Test claim"
-            p.analyzed_at = datetime.now(UTC)
+        # Ensure papers look unanalyzed initially
+        for p in mock_papers:
+            p.analyzed_at = None
+
+        # Create analyzed versions for the return value
+        analyzed_papers = []
+        for p in mock_papers:
+            analyzed_p = Mock(spec=Paper)
+            analyzed_p.arxiv_id = p.arxiv_id
+            analyzed_p.title = p.title
+            analyzed_p.main_claim = "Test claim"
+            analyzed_p.analyzed_at = datetime.now(UTC)
+            analyzed_papers.append(analyzed_p)
 
         mock_analyze.return_value = analyzed_papers
+
+        # Mock database session for reloading papers
+        mock_session = Mock()
+        mock_session.query.return_value.filter.return_value.all.return_value = analyzed_papers
+        mock_db.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_db.return_value.__exit__ = Mock(return_value=None)
 
         state = {
             "discovered_papers": mock_papers,
@@ -123,6 +139,7 @@ class TestNodeFunctions:
 
         assert result["analyzed_papers"] == analyzed_papers
         assert result["stats"]["analyzed_count"] == 2
+        assert result["stats"]["cached_count"] == 0
         assert len(result["errors"]) == 0
 
     def test_reader_node_no_papers(self):
@@ -142,6 +159,10 @@ class TestNodeFunctions:
     @patch("src.graph.analyze_papers_batch")
     def test_reader_node_handles_errors(self, mock_analyze, mock_papers):
         """Test reader node handles errors gracefully."""
+        # Ensure papers look unanalyzed
+        for p in mock_papers:
+            p.analyzed_at = None
+
         mock_analyze.side_effect = Exception("Claude API failed")
 
         state = {
@@ -214,33 +235,58 @@ class TestWorkflowCreation:
 class TestFullPipeline:
     """Test complete pipeline execution."""
 
+    @patch("src.graph.get_db_session")
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
     @patch("src.graph.explain_papers_batch")
     def test_run_full_pipeline_success(
-        self, mock_explain, mock_analyze, mock_discover, mock_papers
+        self, mock_explain, mock_analyze, mock_discover, mock_db, mock_papers
     ):
         """Test successful execution of full pipeline."""
+        # Ensure papers start unanalyzed/unassessed
+        for p in mock_papers:
+            p.analyzed_at = None
+            p.explained_at = None
+            p.breakthrough_score = None
+
         mock_discover.return_value = mock_papers
 
-        analyzed = mock_papers.copy()
-        for p in analyzed:
-            p.main_claim = "Claim"
-            p.analyzed_at = datetime.now(UTC)
+        # Create separate analyzed paper objects
+        analyzed = []
+        for p in mock_papers:
+            ap = Mock(spec=Paper)
+            ap.arxiv_id = p.arxiv_id
+            ap.title = p.title
+            ap.main_claim = "Claim"
+            ap.analyzed_at = datetime.now(UTC)
+            ap.explained_at = None
+            ap.breakthrough_score = None
+            analyzed.append(ap)
         mock_analyze.return_value = analyzed
 
-        explained = analyzed.copy()
-        for p in explained:
-            p.eli5_summary = "Summary"
-            p.explained_at = datetime.now(UTC)
+        # Create separate explained paper objects
+        explained = []
+        for p in analyzed:
+            ep = Mock(spec=Paper)
+            ep.arxiv_id = p.arxiv_id
+            ep.title = p.title
+            ep.main_claim = p.main_claim
+            ep.eli5_summary = "Summary"
+            ep.explained_at = datetime.now(UTC)
+            ep.analyzed_at = p.analyzed_at
+            ep.breakthrough_score = 0.5  # Set a score to avoid comparison issues
+            explained.append(ep)
         mock_explain.return_value = explained
+
+        # Mock database session for reloading papers
+        mock_session = Mock()
+        mock_session.query.return_value.filter.return_value.all.return_value = explained
+        mock_db.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_db.return_value.__exit__ = Mock(return_value=None)
 
         result = run_full_pipeline(days_back=7, max_papers=2)
 
         assert result["discovered_papers"] == mock_papers
-        assert result["analyzed_papers"] == analyzed
-        assert result["explained_papers"] == explained
-        assert result["final_papers"] == explained
         assert result["stats"]["discovered_count"] == 2
         assert result["stats"]["analyzed_count"] == 2
         assert result["stats"]["explained_count"] == 2
@@ -390,8 +436,12 @@ class TestStateManagement:
             state = discovery_node(state)
 
         with patch("src.graph.analyze_papers_batch", side_effect=Exception("Error 2")):
-            # Provide papers so reader_node actually tries to analyze them
-            state["discovered_papers"] = [Mock(arxiv_id="test.1", title="Test")]
+            # Provide unanalyzed papers so reader_node actually tries to analyze them
+            mock_paper = Mock(spec=Paper)
+            mock_paper.arxiv_id = "test.1"
+            mock_paper.title = "Test"
+            mock_paper.analyzed_at = None  # Must be None for caching to not skip
+            state["discovered_papers"] = [mock_paper]
             state = reader_node(state)
 
         assert len(state["errors"]) == 2

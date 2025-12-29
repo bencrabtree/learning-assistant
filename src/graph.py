@@ -266,21 +266,44 @@ def reader_node(state: AgentState) -> AgentState:
             state["stats"]["analyzed_count"] = 0
             return state
 
-        logger.info(f"Analyzing {len(papers)} papers with Claude Haiku...")
+        # Filter to papers that haven't been analyzed yet (caching)
+        unanalyzed = [p for p in papers if p.analyzed_at is None]
+        already_analyzed = len(papers) - len(unanalyzed)
 
-        # Call reader agent
+        if already_analyzed > 0:
+            logger.info(f"Skipping {already_analyzed} already-analyzed papers (cached)")
+
+        if not unanalyzed:
+            logger.info("All papers already analyzed - using cached results")
+            state["analyzed_papers"] = papers
+            if "stats" not in state or state["stats"] is None:
+                state["stats"] = {}
+            state["stats"]["analyzed_count"] = 0
+            state["stats"]["cached_count"] = already_analyzed
+            return state
+
+        logger.info(f"Analyzing {len(unanalyzed)} papers with Claude Haiku...")
+
+        # Call reader agent - only on unanalyzed papers
         # This will analyze papers and save to database
-        analyzed = analyze_papers_batch(papers)
+        newly_analyzed = analyze_papers_batch(unanalyzed)
 
-        logger.info(f"✅ Analysis complete: {len(analyzed)} papers")
+        logger.info(f"✅ Analysis complete: {len(newly_analyzed)} papers")
+
+        # Merge newly analyzed with already-analyzed papers
+        # Reload all papers to get updated data
+        with get_db_session() as db:
+            arxiv_ids = [p.arxiv_id for p in papers]
+            all_papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
 
         # Update state
-        state["analyzed_papers"] = analyzed
+        state["analyzed_papers"] = all_papers
 
         # Update stats
         if "stats" not in state or state["stats"] is None:
             state["stats"] = {}
-        state["stats"]["analyzed_count"] = len(analyzed)
+        state["stats"]["analyzed_count"] = len(newly_analyzed)
+        state["stats"]["cached_count"] = already_analyzed
 
     except Exception as e:
         logger.error(f"❌ Reader node failed: {e}")
@@ -485,22 +508,52 @@ def assessor_node(state: AgentState) -> AgentState:
             state["assessed_papers"] = []
             return state
 
-        logger.info(f"Assessing {len(papers)} papers for breakthrough potential...")
+        # Filter to papers that haven't been assessed yet (caching)
+        unassessed = [p for p in papers if p.breakthrough_score is None]
+        already_assessed = len(papers) - len(unassessed)
 
-        # Run batch assessment
-        assessed_papers, assessments = assess_papers_batch(papers)
+        if already_assessed > 0:
+            logger.info(f"Skipping {already_assessed} already-assessed papers (cached)")
 
-        breakthrough_count = sum(1 for a in assessments if a.get("is_breakthrough", False))
+        if not unassessed:
+            logger.info("All papers already assessed - using cached results")
+            state["assessments"] = []
+            state["assessed_papers"] = papers
+            if "stats" not in state or state["stats"] is None:
+                state["stats"] = {}
+            state["stats"]["assessed_count"] = 0
+            state["stats"]["cached_assessed_count"] = already_assessed
+            # Count breakthroughs from cached papers
+            breakthrough_count = sum(
+                1 for p in papers if p.breakthrough_score and p.breakthrough_score >= 0.8
+            )
+            state["stats"]["breakthrough_count"] = breakthrough_count
+            return state
+
+        logger.info(f"Assessing {len(unassessed)} papers for breakthrough potential...")
+
+        # Run batch assessment - only on unassessed papers
+        _, assessments = assess_papers_batch(unassessed)
+
+        # Reload all papers from database to get updated scores
+        with get_db_session() as db:
+            arxiv_ids = [p.arxiv_id for p in papers]
+            all_papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+
+        breakthrough_count = sum(
+            1 for p in all_papers if p.breakthrough_score and p.breakthrough_score >= 0.8
+        )
         logger.info(
             f"✅ Assessment complete: {breakthrough_count}/{len(papers)} breakthroughs detected"
         )
 
         state["assessments"] = assessments
-        state["assessed_papers"] = assessed_papers
+        state["assessed_papers"] = all_papers
 
         if "stats" not in state or state["stats"] is None:
             state["stats"] = {}
-        state["stats"]["assessed_count"] = len(assessed_papers)
+        state["stats"]["assessed_count"] = len(unassessed)
+        state["stats"]["cached_assessed_count"] = already_assessed
         state["stats"]["breakthrough_count"] = breakthrough_count
 
     except Exception as e:

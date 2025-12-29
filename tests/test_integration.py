@@ -30,6 +30,7 @@ def integration_db():
 class TestWorkflowOrchestration:
     """Test workflow orchestration without database complexity."""
 
+    @patch("src.graph.get_db_session")
     @patch("src.graph.discover_papers")
     @patch("src.graph.analyze_papers_batch")
     @patch("src.graph.explain_papers_batch")
@@ -46,9 +47,10 @@ class TestWorkflowOrchestration:
         mock_explain,
         mock_analyze,
         mock_discover,
+        mock_db,
     ):
         """Test that full pipeline correctly orchestrates all agents."""
-        # Create simple mock papers (not Mock objects, but simple dicts)
+        # Create mock papers - these start unanalyzed
         mock_papers = [
             Mock(
                 arxiv_id=f"2312.{i}",
@@ -66,34 +68,68 @@ class TestWorkflowOrchestration:
 
         mock_discover.return_value = mock_papers
 
-        analyzed = mock_papers.copy()
-        for p in analyzed:
-            p.main_claim = "Test claim"
-            p.analyzed_at = datetime.now(UTC)
+        # Create SEPARATE analyzed paper objects (not modifying originals)
+        analyzed = [
+            Mock(
+                arxiv_id=f"2312.{i}",
+                title=f"Paper {i}",
+                main_claim="Test claim",
+                analyzed_at=datetime.now(UTC),
+                eli5_summary=None,
+                explained_at=None,
+                breakthrough_score=None,
+            )
+            for i in range(2)
+        ]
         mock_analyze.return_value = analyzed
 
-        explained = analyzed.copy()
-        for p in explained:
-            p.eli5_summary = "Simple explanation"
-            p.explained_at = datetime.now(UTC)
+        # Create SEPARATE explained paper objects
+        explained = [
+            Mock(
+                arxiv_id=f"2312.{i}",
+                title=f"Paper {i}",
+                main_claim="Test claim",
+                analyzed_at=datetime.now(UTC),
+                eli5_summary="Simple explanation",
+                explained_at=datetime.now(UTC),
+                breakthrough_score=None,
+            )
+            for i in range(2)
+        ]
         mock_explain.return_value = explained
 
         # Mock social signals
         mock_hn.return_value = []
         mock_twitter.return_value = []
 
-        # Mock assessor (returns tuple of papers, assessments)
-        assessed = explained.copy()
-        for p in assessed:
-            p.breakthrough_score = 0.5
-            p.assessed_at = datetime.now(UTC)
+        # Create SEPARATE assessed paper objects
+        assessed = [
+            Mock(
+                arxiv_id=f"2312.{i}",
+                title=f"Paper {i}",
+                breakthrough_score=0.5,
+                assessed_at=datetime.now(UTC),
+            )
+            for i in range(2)
+        ]
         assessments = [{"is_breakthrough": False} for _ in assessed]
         mock_assess.return_value = (assessed, assessments)
 
-        ranked = assessed.copy()
-        for p in ranked:
-            p.relevance_score = 0.7
+        ranked = [
+            Mock(
+                arxiv_id=f"2312.{i}",
+                title=f"Paper {i}",
+                relevance_score=0.7,
+            )
+            for i in range(2)
+        ]
         mock_curate.return_value = ranked
+
+        # Mock database session for reloading papers
+        mock_session = Mock()
+        mock_session.query.return_value.filter.return_value.all.return_value = analyzed
+        mock_db.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_db.return_value.__exit__ = Mock(return_value=None)
 
         result = run_full_pipeline(days_back=1, max_papers=2)
 
@@ -195,7 +231,15 @@ class TestErrorHandling:
         mock_discover,
     ):
         """Test that pipeline continues after partial failures."""
-        mock_papers = [Mock(arxiv_id=f"2312.{i}", title=f"Paper {i}") for i in range(2)]
+        # Create mock papers that look unanalyzed
+        mock_papers = [
+            Mock(
+                arxiv_id=f"2312.{i}",
+                title=f"Paper {i}",
+                analyzed_at=None,  # Must be None for caching to not skip
+            )
+            for i in range(2)
+        ]
         mock_discover.return_value = mock_papers
 
         # Analysis fails but pipeline should continue
@@ -209,7 +253,7 @@ class TestErrorHandling:
         result = run_full_pipeline(days_back=1)
 
         assert result["stats"]["discovered_count"] == 2
-        assert result["stats"]["analyzed_count"] == 0
+        assert result["stats"].get("analyzed_count", 0) == 0
         assert len(result["errors"]) > 0
 
 

@@ -217,10 +217,18 @@ def assess_papers_batch(papers: list[Paper]) -> tuple[list[Paper], list[dict[str
     agent = AssessorAgent()
     assessments = []
 
-    for paper in papers:
+    total = len(papers)
+    for i, paper in enumerate(papers, 1):
+        logger.info(f"[{i}/{total}] Assessing: {paper.title[:50]}...")
         assessment = agent.assess_and_save(paper)
         assessment["arxiv_id"] = paper.arxiv_id
         assessments.append(assessment)
+
+        # Log breakthrough status immediately
+        if assessment.get("is_breakthrough"):
+            logger.info(f"  🚀 BREAKTHROUGH! Score: {assessment['breakthrough_score']:.0%}")
+        else:
+            logger.debug(f"  Score: {assessment['breakthrough_score']:.0%}")
 
     logger.info(
         f"Assessed {len(papers)} papers, "
