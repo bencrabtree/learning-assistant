@@ -22,6 +22,9 @@ plotly>=5.18.0
 # Dashboard
 streamlit>=1.29.0
 
+# Feedback Server
+flask>=3.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.5.0

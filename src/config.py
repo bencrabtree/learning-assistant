@@ -206,6 +206,22 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Feedback Settings - For collecting user feedback
+    # ============================================================================
+
+    feedback_url: str | None = Field(
+        default=None,
+        alias="FEEDBACK_URL",
+        description="Base URL for feedback endpoint (e.g., http://localhost:8080)",
+    )
+
+    feedback_port: int = Field(
+        default=8080,
+        alias="FEEDBACK_PORT",
+        description="Port to run the feedback server on",
+    )
+
+    # ============================================================================
     # Logging
     # ============================================================================
 

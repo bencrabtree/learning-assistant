@@ -94,9 +94,12 @@ class EmailNotifier:
     def _build_html(self, papers: list[Paper], reason: str) -> str:
         """Build HTML email body."""
         papers_html = ""
+        feedback_url = settings.feedback_url
+
         for i, paper in enumerate(papers, 1):
             scores = self._format_scores(paper)
             reasons = self._format_reasons(paper)
+            feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
 
             # Build reasons section if we have reasons
             reasons_html = ""
@@ -122,10 +125,11 @@ class EmailNotifier:
                 <div style="font-size: 13px; color: #888;">
                     {scores}
                 </div>
-                <div style="margin-top: 12px;">
+                <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px;">
                     <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
                         View on arXiv →
                     </a>
+                    {feedback_buttons}
                 </div>
             </div>
             """
@@ -250,6 +254,34 @@ class EmailNotifier:
                 reasons.append("Strong match with your research areas")
 
         return " • ".join(reasons) if reasons else ""
+
+    def _build_feedback_buttons(self, arxiv_id: str, feedback_url: str | None) -> str:
+        """Build HTML feedback buttons for a paper."""
+        if not feedback_url:
+            return ""
+
+        button_style = (
+            "display: inline-block; padding: 4px 8px; border-radius: 4px; "
+            "text-decoration: none; font-size: 12px; margin-left: 4px;"
+        )
+
+        return f"""
+        <span style="margin-left: auto; white-space: nowrap;">
+            Rate:
+            <a href="{feedback_url}/feedback/{arxiv_id}/good"
+               style="{button_style} background: #d4edda; color: #155724;">
+               👍 Good
+            </a>
+            <a href="{feedback_url}/feedback/{arxiv_id}/neutral"
+               style="{button_style} background: #fff3cd; color: #856404;">
+               😐 Neutral
+            </a>
+            <a href="{feedback_url}/feedback/{arxiv_id}/bad"
+               style="{button_style} background: #f8d7da; color: #721c24;">
+               👎 Bad
+            </a>
+        </span>
+        """
 
     def _send_email(self, msg: MIMEMultipart) -> None:
         """Send the email via SMTP."""
