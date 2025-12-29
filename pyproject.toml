@@ -226,6 +226,13 @@ skip_covered = false
 directory = "htmlcov"
 
 # ===========================
+# Bandit Configuration (Security)
+# ===========================
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv"]
+skips = ["B101"]  # Allow assert in test files
+
+# ===========================
 # isort Configuration (Import Sorting)
 # ===========================
 [tool.isort]
