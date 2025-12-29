@@ -7,6 +7,7 @@ Key Concepts:
 - ELI5 = Explain Like I'm 5 (simple explanations for complex topics)
 - Learning-oriented = Focused on helping people understand, not just summarize
 - Pedagogical prompting = Designing prompts that encourage teaching
+- Parallel processing = Multiple API calls concurrently for speed
 
 Difference from Reader Agent:
 - Reader = Extract technical info (for researchers)
@@ -29,6 +30,7 @@ Example:
     print(explanation["eli5_summary"])
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from loguru import logger
@@ -311,17 +313,41 @@ IMPORTANT:
             # Commit happens automatically when we exit the with block
             logger.debug(f"✅ Saved explanation for {arxiv_id}")
 
-    def explain_and_save(self, papers: list[Paper]) -> int:
+    def _explain_single(self, paper: Paper) -> tuple[str, dict[str, Any] | None, bool]:
         """
-        Explain papers and save results to database.
+        Explain a single paper and return result tuple.
 
-        This is the convenience method that does everything:
-        1. Explain each paper
-        2. Save results to database
-        3. Return count of successful explanations
+        Helper method for parallel processing.
+
+        Args:
+            paper: Paper to explain
+
+        Returns:
+            Tuple of (arxiv_id, explanation_dict or None, was_skipped)
+        """
+        # Skip if not analyzed
+        if not paper.analyzed_at:
+            logger.warning(f"Skipping {paper.arxiv_id} - not analyzed yet")
+            return (paper.arxiv_id, None, True)
+
+        try:
+            explanation = self.explain_paper(paper)
+            return (paper.arxiv_id, explanation, False)
+        except Exception as e:
+            logger.error(f"Failed to explain {paper.arxiv_id}: {e}")
+            return (paper.arxiv_id, None, False)
+
+    def explain_and_save(self, papers: list[Paper], max_workers: int = 5) -> int:
+        """
+        Explain papers in parallel and save results to database.
+
+        Uses ThreadPoolExecutor to process multiple papers concurrently.
+        Each paper's prompt is moderate (~2-3K tokens), so we limit
+        concurrency to avoid rate limits.
 
         Args:
             papers: List of Paper objects (must be analyzed)
+            max_workers: Maximum concurrent API calls (default: 5)
 
         Returns:
             Number of successfully explained papers
@@ -335,32 +361,46 @@ IMPORTANT:
             count = explainer.explain_and_save(papers)
             print(f"Explained {count} papers")
         """
-        logger.info(f"Explaining and saving {len(papers)} papers...")
+        if not papers:
+            return 0
+
+        logger.info(f"Explaining {len(papers)} papers with {max_workers} parallel workers...")
 
         success_count = 0
         skipped = 0
+        results: list[tuple[str, dict[str, Any]]] = []
 
-        for i, paper in enumerate(papers, 1):
-            logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
+        # Sequential processing when max_workers=1 (avoids SQLite threading issues)
+        if max_workers == 1:
+            for i, paper in enumerate(papers, 1):
+                logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
+                arxiv_id, explanation, was_skipped = self._explain_single(paper)
+                if was_skipped:
+                    skipped += 1
+                elif explanation:
+                    results.append((arxiv_id, explanation))
+        else:
+            # Process papers in parallel
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(self._explain_single, paper): paper for paper in papers}
 
-            # Skip if not analyzed
-            if not paper.analyzed_at:
-                logger.warning(f"Skipping {paper.arxiv_id} - not analyzed yet")
-                skipped += 1
-                continue
+                for i, future in enumerate(as_completed(futures), 1):
+                    paper = futures[future]
+                    logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
 
+                    arxiv_id, explanation, was_skipped = future.result()
+                    if was_skipped:
+                        skipped += 1
+                    elif explanation:
+                        results.append((arxiv_id, explanation))
+
+        # Save results to database (sequential to avoid conflicts)
+        for arxiv_id, explanation in results:
             try:
-                # Explain the paper
-                explanation = self.explain_paper(paper)
-
-                # Save to database
-                self.save_explanation(paper.arxiv_id, explanation)
-
+                self.save_explanation(arxiv_id, explanation)
                 success_count += 1
-
             except Exception as e:
-                logger.error(f"Failed to process {paper.arxiv_id}: {e}")
-                continue
+                logger.error(f"Failed to save {arxiv_id}: {e}")
 
         logger.info(
             f"✅ Successfully explained {success_count}/{len(papers)} papers "
@@ -374,7 +414,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def explain_papers_batch(papers: list[Paper]) -> list[Paper]:
+def explain_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Paper]:
     """
     Batch explain papers and return updated Paper objects.
 
@@ -382,6 +422,7 @@ def explain_papers_batch(papers: list[Paper]) -> list[Paper]:
 
     Args:
         papers: List of analyzed Paper objects
+        max_workers: Maximum concurrent API calls (default: 5)
 
     Returns:
         List of Paper objects with explanation fields populated
@@ -394,7 +435,7 @@ def explain_papers_batch(papers: list[Paper]) -> list[Paper]:
             return state
     """
     explainer = ExplainerAgent()
-    explainer.explain_and_save(papers)
+    explainer.explain_and_save(papers, max_workers=max_workers)
 
     # Reload papers from database to get updated data
     with get_db_session() as db:

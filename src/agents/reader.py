@@ -7,6 +7,7 @@ Key Concepts:
 - Structured extraction = Getting specific fields from unstructured text
 - JSON mode = Claude returns data in a predictable format
 - Prompt engineering = Designing prompts to get good results
+- Parallel processing = Multiple API calls concurrently for speed
 
 What the Reader Agent does:
 1. Takes a paper (title, abstract, authors)
@@ -31,6 +32,7 @@ Example:
     # analysis contains structured data about the paper
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from loguru import logger
@@ -275,17 +277,36 @@ IMPORTANT:
             # Commit happens automatically when we exit the with block
             logger.debug(f"✅ Saved analysis for {arxiv_id}")
 
-    def analyze_and_save(self, papers: list[Paper]) -> int:
+    def _analyze_single(self, paper: Paper) -> tuple[str, dict[str, Any] | None]:
         """
-        Analyze papers and save results to database.
+        Analyze a single paper and return result tuple.
 
-        This is the convenience method that does everything:
-        1. Analyze each paper
-        2. Save results to database
-        3. Return count of successful analyses
+        Helper method for parallel processing.
+
+        Args:
+            paper: Paper to analyze
+
+        Returns:
+            Tuple of (arxiv_id, analysis_dict or None if failed)
+        """
+        try:
+            analysis = self.analyze_paper(paper)
+            return (paper.arxiv_id, analysis)
+        except Exception as e:
+            logger.error(f"Failed to analyze {paper.arxiv_id}: {e}")
+            return (paper.arxiv_id, None)
+
+    def analyze_and_save(self, papers: list[Paper], max_workers: int = 5) -> int:
+        """
+        Analyze papers in parallel and save results to database.
+
+        Uses ThreadPoolExecutor to process multiple papers concurrently.
+        Each paper's prompt is small (~1-2K tokens), so we can safely
+        run many in parallel without context issues.
 
         Args:
             papers: List of Paper objects
+            max_workers: Maximum concurrent API calls (default: 5)
 
         Returns:
             Number of successfully analyzed papers
@@ -296,25 +317,41 @@ IMPORTANT:
             count = reader.analyze_and_save(papers)
             print(f"Analyzed {count} papers")
         """
-        logger.info(f"Analyzing and saving {len(papers)} papers...")
+        if not papers:
+            return 0
+
+        logger.info(f"Analyzing {len(papers)} papers with {max_workers} parallel workers...")
 
         success_count = 0
+        results: list[tuple[str, dict[str, Any] | None]] = []
 
-        for i, paper in enumerate(papers, 1):
-            logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
+        # Sequential processing when max_workers=1 (avoids SQLite threading issues)
+        if max_workers == 1:
+            for i, paper in enumerate(papers, 1):
+                logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
+                arxiv_id, analysis = self._analyze_single(paper)
+                if analysis:
+                    results.append((arxiv_id, analysis))
+        else:
+            # Process papers in parallel
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(self._analyze_single, paper): paper for paper in papers}
 
+                for i, future in enumerate(as_completed(futures), 1):
+                    paper = futures[future]
+                    logger.info(f"Progress: {i}/{len(papers)} - {paper.title[:40]}...")
+
+                    arxiv_id, analysis = future.result()
+                    if analysis:
+                        results.append((arxiv_id, analysis))
+
+        # Save results to database (sequential to avoid conflicts)
+        for arxiv_id, analysis in results:
             try:
-                # Analyze the paper
-                analysis = self.analyze_paper(paper)
-
-                # Save to database
-                self.save_analysis(paper.arxiv_id, analysis)
-
+                self.save_analysis(arxiv_id, analysis)
                 success_count += 1
-
             except Exception as e:
-                logger.error(f"Failed to process {paper.arxiv_id}: {e}")
-                continue
+                logger.error(f"Failed to save {arxiv_id}: {e}")
 
         logger.info(f"✅ Successfully analyzed {success_count}/{len(papers)} papers")
         return success_count
@@ -325,7 +362,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def analyze_papers_batch(papers: list[Paper]) -> list[Paper]:
+def analyze_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Paper]:
     """
     Batch analyze papers and return updated Paper objects.
 
@@ -340,6 +377,7 @@ def analyze_papers_batch(papers: list[Paper]) -> list[Paper]:
 
     Args:
         papers: List of Paper objects to analyze
+        max_workers: Maximum concurrent API calls (default: 5)
 
     Returns:
         List of Paper objects with analysis fields populated
@@ -352,7 +390,7 @@ def analyze_papers_batch(papers: list[Paper]) -> list[Paper]:
             return state
     """
     reader = ReaderAgent()
-    reader.analyze_and_save(papers)
+    reader.analyze_and_save(papers, max_workers=max_workers)
 
     # Reload papers from database to get updated data
     with get_db_session() as db:
