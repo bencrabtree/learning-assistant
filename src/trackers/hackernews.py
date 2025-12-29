@@ -131,18 +131,32 @@ class HackerNewsTracker:
         Returns:
             List of dicts with arxiv_id and HN engagement data
         """
-        result = self._search_algolia("arxiv.org", tags="story", num_results=200)
-        if not result:
+        # Use search_by_date endpoint with date filter for recent results
+        cutoff = datetime.now() - timedelta(days=days_back)
+        cutoff_timestamp = int(cutoff.timestamp())
+
+        url = f"{self.ALGOLIA_API}/search_by_date"
+        params = {
+            "query": "arxiv.org",
+            "tags": "story",
+            "numericFilters": f"created_at_i>{cutoff_timestamp}",
+            "hitsPerPage": 200,
+        }
+
+        try:
+            response = self.session.get(url, params=params, timeout=30)
+            if response.status_code != 200:
+                logger.warning(f"Algolia API error: {response.status_code}")
+                return []
+            result = response.json()
+        except requests.RequestException as e:
+            logger.error(f"Algolia request failed: {e}")
             return []
 
         papers = {}
-        cutoff = datetime.now() - timedelta(days=days_back)
 
         for hit in result.get("hits", []):
-            # Check if within time range
             created_at = hit.get("created_at_i", 0)
-            if created_at < cutoff.timestamp():
-                continue
 
             # Extract arXiv ID
             url = hit.get("url", "")

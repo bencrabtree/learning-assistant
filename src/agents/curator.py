@@ -61,29 +61,20 @@ class CuratorAgent:
         return matches / len(user_interests) if user_interests else 0.0
 
     def calculate_social_score(self, paper: Paper) -> float:
-        """Calculate social proof score from HackerNews engagement."""
+        """Get combined social score from HN and Twitter signals.
+
+        Uses pre-calculated social scores stored in score_components.
+        Returns the maximum of HN and Twitter scores.
+        """
         if not paper.score_components:
             return 0.0
 
-        hn_score = paper.score_components.get("hn_score", 0)
-        hn_comments = paper.score_components.get("hn_comments", 0)
+        # Use pre-calculated scores from signal node
+        hn_social = paper.score_components.get("hn_social_score", 0.0)
+        twitter_social = paper.score_components.get("twitter_social_score", 0.0)
 
-        social_score = 0.0
-        if hn_score > 200:
-            social_score += 0.30
-        elif hn_score > 100:
-            social_score += 0.20
-        elif hn_score > 50:
-            social_score += 0.10
-
-        if hn_comments > 100:
-            social_score += 0.15
-        elif hn_comments > 50:
-            social_score += 0.10
-        elif hn_comments > 20:
-            social_score += 0.05
-
-        return min(social_score, 0.5)
+        # Return max score (trending on either platform counts)
+        return max(hn_social, twitter_social)
 
     def calculate_citation_score(self, paper: Paper) -> float:
         """Calculate age-adjusted citation score."""

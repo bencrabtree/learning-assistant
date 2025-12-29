@@ -1,6 +1,6 @@
 # Milestone 4: Truly Agentic LangGraph Workflow
 
-**Status:** Planned
+**Status:** In Progress
 **Priority:** High - Core learning objective
 **Dependencies:** Milestone 3 (Research Radar)
 
@@ -23,169 +23,261 @@ Refactor the Research Radar to use LangGraph's agentic patterns. The radar loop 
 
 ---
 
+## Agentic Workflow Architecture
+
+### High-Level Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        AGENTIC RADAR WORKFLOW                               │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                         DISCOVERY PHASE                              │   │
+│  │                                                                      │   │
+│  │   START ──► StrategyAgent ──► ScannerAgent ──► FilterAgent          │   │
+│  │                  │                                    │              │   │
+│  │                  │ (selects search                    │ (removes     │   │
+│  │                  │  strategy)                         │  duplicates) │   │
+│  └──────────────────┼────────────────────────────────────┼──────────────┘   │
+│                     │                                    │                  │
+│  ┌──────────────────┼────────────────────────────────────┼──────────────┐   │
+│  │                  ▼        ASSESSMENT PHASE            ▼              │   │
+│  │                                                                      │   │
+│  │              AssessorAgent ──────────────► CuratorAgent              │   │
+│  │                  │                              │                    │   │
+│  │                  │ (breakthrough                │ (scores &          │   │
+│  │                  │  detection)                  │  ranks)            │   │
+│  └──────────────────┼──────────────────────────────┼────────────────────┘   │
+│                     │                              │                        │
+│  ┌──────────────────┼──────────────────────────────┼────────────────────┐   │
+│  │                  ▼        DECISION PHASE        ▼                    │   │
+│  │                                                                      │   │
+│  │                      DecisionAgent                                   │   │
+│  │                           │                                          │   │
+│  │              ┌────────────┼────────────┐                             │   │
+│  │              ▼            ▼            ▼                             │   │
+│  │          [NOTIFY]    [EXPAND]     [DONE]                             │   │
+│  │              │            │            │                             │   │
+│  │              ▼            ▼            ▼                             │   │
+│  │        NotifierAgent  StrategyAgent  LogAgent                        │   │
+│  │              │            │            │                             │   │
+│  │              ▼            │            ▼                             │   │
+│  │            END      (loop back)      END                             │   │
+│  │                     to DISCOVERY                                     │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Detailed Agent Responsibilities
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              AGENT ROSTER                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
+│  │  StrategyAgent  │    │  ScannerAgent   │    │  FilterAgent    │         │
+│  ├─────────────────┤    ├─────────────────┤    ├─────────────────┤         │
+│  │ • Selects next  │    │ • Executes      │    │ • Removes seen  │         │
+│  │   search        │    │   arXiv search  │    │   papers        │         │
+│  │   strategy      │    │ • Fetches HN    │    │ • Deduplicates  │         │
+│  │ • Tracks tried  │    │   signals       │    │ • Updates       │         │
+│  │   strategies    │    │ • Fetches       │    │   papers_seen   │         │
+│  │ • Decides       │    │   Twitter       │    │   in state      │         │
+│  │   expansion     │    │   signals       │    │                 │         │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘         │
+│                                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
+│  │  AssessorAgent  │    │  CuratorAgent   │    │  DecisionAgent  │         │
+│  ├─────────────────┤    ├─────────────────┤    ├─────────────────┤         │
+│  │ • Breakthrough  │    │ • Multi-signal  │    │ • Evaluates     │         │
+│  │   detection     │    │   scoring       │    │   noteworthy    │         │
+│  │ • Novelty/      │    │ • Ranking by    │    │   threshold     │         │
+│  │   impact        │    │   relevance     │    │ • Routes to     │         │
+│  │   scoring       │    │ • Interest      │    │   NOTIFY/       │         │
+│  │ • Evidence      │    │   matching      │    │   EXPAND/DONE   │         │
+│  │   quality       │    │                 │    │ • Checks max    │         │
+│  │                 │    │                 │    │   iterations    │         │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘         │
+│                                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐                                │
+│  │  NotifierAgent  │    │    LogAgent     │                                │
+│  ├─────────────────┤    ├─────────────────┤                                │
+│  │ • Formats       │    │ • Logs cycle    │                                │
+│  │   notification  │    │   results       │                                │
+│  │ • Sends email   │    │ • Records       │                                │
+│  │ • Records       │    │   strategies    │                                │
+│  │   delivery      │    │   tried         │                                │
+│  │   status        │    │ • Audit trail   │                                │
+│  └─────────────────┘    └─────────────────┘                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### State Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           STATE EVOLUTION                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ITERATION 1                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ papers_seen: {}                                                      │   │
+│  │ strategies_tried: []                                                 │   │
+│  │ current_strategy: "recent_2_days"                                    │   │
+│  │ noteworthy_papers: []                                                │   │
+│  │ iterations: 0                                                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              │                                              │
+│                              ▼                                              │
+│  ITERATION 2 (after expand_timeframe)                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ papers_seen: {"2312.001", "2312.002", "2312.003"}                    │   │
+│  │ strategies_tried: ["recent_2_days"]                                  │   │
+│  │ current_strategy: "recent_7_days"                                    │   │
+│  │ noteworthy_papers: []                                                │   │
+│  │ iterations: 1                                                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              │                                              │
+│                              ▼                                              │
+│  ITERATION 3 (after check_social)                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ papers_seen: {"2312.001", "2312.002", ..., "2312.010"}               │   │
+│  │ strategies_tried: ["recent_2_days", "recent_7_days"]                 │   │
+│  │ current_strategy: "trending_social"                                  │   │
+│  │ noteworthy_papers: [Paper("Breakthrough Discovery")]                 │   │
+│  │ iterations: 2                                                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              │                                              │
+│                              ▼                                              │
+│                         [NOTIFY] ──► END                                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Key Concepts
 
 ### Conditional Edges
 The graph decides at runtime which node to execute next:
 ```python
-def should_notify(state: RadarState) -> str:
+def decision_agent(state: RadarState) -> str:
+    """DecisionAgent: Routes workflow based on findings."""
     if state["noteworthy_papers"]:
         return "notify"
     elif state["iterations"] >= state["max_iterations"]:
-        return "log_nothing"
+        return "done"
     else:
-        return "expand_search"
+        return "expand"
 ```
 
-### Iterative Search
-The graph can loop back to try different strategies:
-1. First: Scan last 2 days
-2. If nothing: Expand to 7 days
-3. If nothing: Try different categories
-4. If nothing: Check trending from HN/Twitter
+### Expansion Strategies
+The StrategyAgent selects from multiple search strategies:
+```python
+EXPANSION_STRATEGIES = [
+    "recent_2_days",      # Initial: Last 2 days
+    "recent_7_days",      # Expand: Last 7 days
+    "recent_14_days",     # Expand: Last 14 days
+    "trending_social",    # Focus: HN/Twitter trending
+    "lower_threshold",    # Relax: Accept lower scores
+]
+```
 
 ### State Accumulation
 State grows across iterations:
 ```python
 class RadarState(TypedDict):
+    # Iteration tracking
     papers_seen: set[str]           # Don't re-process
     strategies_tried: list[str]     # Track what we've tried
+    current_strategy: str           # Active strategy
+
+    # Results accumulation
     noteworthy_papers: list[Paper]  # Accumulate findings
-    iterations: int                  # Track loop count
-    max_iterations: int              # Prevent infinite loops
+    all_papers: list[Paper]         # All discovered papers
+
+    # Control flow
+    iterations: int                 # Track loop count
+    max_iterations: int             # Prevent infinite loops
+
+    # Metadata
+    cycle_stats: dict               # Statistics per iteration
+    errors: list[str]               # Error tracking
 ```
 
 ---
 
-## Workflow Design
+## Implementation
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    RADAR WORKFLOW (LangGraph)                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   START → scan_papers → assess_batch → check_noteworthy         │
-│                                              │                  │
-│                             ┌────────────────┴───────────┐      │
-│                             ▼                            ▼      │
-│                       (found noteworthy?)                       │
-│                             │                            │      │
-│                        NO   │                       YES  │      │
-│                             ▼                            ▼      │
-│                      expand_search ─────────────────► notify    │
-│                            │                             │      │
-│                            ▼                             ▼      │
-│                      (max iterations?)                  END     │
-│                            │                                    │
-│                       YES  │  NO                                │
-│                            ▼   └──► back to scan_papers         │
-│                       log_nothing → END                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Graph Construction
 
----
-
-## Key Features
-
-### 1. Graph-Based Radar Workflow
-- All decision logic in the graph
-- Clear visualization of flow
-- Easy to modify/extend
-
-### 2. Expansion Strategies
-Multiple ways to find papers when initial scan fails:
-- `expand_timeframe` - Look further back
-- `expand_categories` - Try related categories
-- `check_social` - Focus on HN/Twitter trending
-- `lower_threshold` - Accept lower scores temporarily
-
-### 3. Persistent State
-- Checkpoint state between runs
-- Resume from last position
-- Audit trail of decisions
-
-### 4. Autonomous Decision-Making
-The graph decides:
-- When to notify vs continue searching
-- Which expansion strategy to try
-- When to give up (max iterations)
-
----
-
-## Implementation Plan
-
-### Phase 1: Create Radar Graph
 ```python
-# src/graph.py
-
 def create_radar_workflow() -> StateGraph:
-    """Create the agentic radar workflow."""
+    """Create the agentic radar workflow with conditional routing."""
     graph = StateGraph(RadarState)
 
-    # Nodes
-    graph.add_node("scan_papers", scan_papers_node)
-    graph.add_node("assess_batch", assess_batch_node)
-    graph.add_node("expand_search", expand_search_node)
-    graph.add_node("notify", notify_node)
-    graph.add_node("log_nothing", log_nothing_node)
+    # Add agent nodes
+    graph.add_node("strategy_agent", strategy_agent_node)
+    graph.add_node("scanner_agent", scanner_agent_node)
+    graph.add_node("filter_agent", filter_agent_node)
+    graph.add_node("assessor_agent", assessor_agent_node)
+    graph.add_node("curator_agent", curator_agent_node)
+    graph.add_node("decision_agent", decision_agent_node)
+    graph.add_node("notifier_agent", notifier_agent_node)
+    graph.add_node("log_agent", log_agent_node)
 
-    # Edges
-    graph.add_edge(START, "scan_papers")
-    graph.add_edge("scan_papers", "assess_batch")
+    # Define flow
+    graph.add_edge(START, "strategy_agent")
+    graph.add_edge("strategy_agent", "scanner_agent")
+    graph.add_edge("scanner_agent", "filter_agent")
+    graph.add_edge("filter_agent", "assessor_agent")
+    graph.add_edge("assessor_agent", "curator_agent")
+    graph.add_edge("curator_agent", "decision_agent")
+
+    # Conditional routing from decision agent
     graph.add_conditional_edges(
-        "assess_batch",
-        should_notify_or_expand,
+        "decision_agent",
+        route_decision,
         {
-            "notify": "notify",
-            "expand": "expand_search",
-            "done": "log_nothing"
+            "notify": "notifier_agent",
+            "expand": "strategy_agent",  # Loop back
+            "done": "log_agent"
         }
     )
-    graph.add_conditional_edges(
-        "expand_search",
-        should_continue,
-        {
-            "continue": "scan_papers",
-            "stop": "log_nothing"
-        }
-    )
-    graph.add_edge("notify", END)
-    graph.add_edge("log_nothing", END)
+
+    graph.add_edge("notifier_agent", END)
+    graph.add_edge("log_agent", END)
 
     return graph.compile()
-```
-
-### Phase 2: Node Implementations
-Each node is a focused function:
-- `scan_papers_node` - Discover papers based on current strategy
-- `assess_batch_node` - Score and filter papers
-- `expand_search_node` - Choose and apply expansion strategy
-- `notify_node` - Send notification
-- `log_nothing_node` - Log that nothing was found
-
-### Phase 3: Integrate with Daemon
-The daemon just invokes the graph:
-```python
-def _run_scan_cycle(self) -> dict:
-    workflow = create_radar_workflow()
-    result = workflow.invoke({
-        "papers_seen": set(),
-        "strategies_tried": [],
-        "noteworthy_papers": [],
-        "iterations": 0,
-        "max_iterations": 3,
-    })
-    return result
 ```
 
 ---
 
 ## Files to Modify/Create
 
-- `src/graph.py` - Add `create_radar_workflow()`, radar nodes
-- `src/radar/daemon.py` - Simplify to just invoke workflow
-- `tests/test_graph.py` - Add radar workflow tests
+| File | Changes |
+|------|---------|
+| `src/graph.py` | Add `RadarState`, `create_radar_workflow()`, all agent nodes |
+| `src/radar/daemon.py` | Simplify to just invoke workflow, remove redundant logic |
+| `tests/test_graph.py` | Add radar workflow tests for all paths |
+| `tests/radar/test_daemon.py` | Update for new integration |
+
+---
+
+## Success Criteria
+
+- [x] Radar is a proper LangGraph workflow
+- [ ] 6+ agent nodes with clear responsibilities
+- [ ] Conditional edges for notify/expand/done decisions
+- [ ] Multiple expansion strategies (timeframe, social, threshold)
+- [ ] State accumulates across iterations (papers_seen, strategies_tried)
+- [ ] Tests cover all graph paths (notify, expand loop, max iterations)
+- [ ] Daemon simplified to just invoke the workflow
+- [ ] Dead code cleaned up from daemon.py
+- [ ] Flow diagrams in docs and README
 
 ---
 
@@ -193,22 +285,11 @@ def _run_scan_cycle(self) -> dict:
 
 This milestone teaches key LangGraph patterns:
 
-1. **Conditional Edges** - Runtime decision-making
+1. **Conditional Edges** - Runtime decision-making based on state
 2. **Iterative Workflows** - Loops with termination conditions
 3. **State Evolution** - Tracking progress across iterations
-4. **Autonomous Agents** - Graph decides, not Python code
-
----
-
-## Success Criteria
-
-- [ ] Radar is a proper LangGraph workflow
-- [ ] Conditional edges for notify/expand decisions
-- [ ] Multiple expansion strategies
-- [ ] State accumulates across iterations
-- [ ] Tests cover all graph paths
-- [ ] Daemon just invokes the workflow
-- [ ] Clear visualization of the workflow
+4. **Agent Composition** - Multiple specialized agents working together
+5. **Autonomous Decision-Making** - Graph decides, not Python code
 
 ---
 
@@ -219,3 +300,4 @@ Once this pattern is established:
 - Add human-in-the-loop checkpoints
 - Implement subgraphs for complex operations
 - Add streaming for real-time updates
+- Checkpoint state between daemon runs for resume capability

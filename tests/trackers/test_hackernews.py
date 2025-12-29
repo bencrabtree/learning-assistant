@@ -9,7 +9,7 @@ Tests HN social signal tracking including:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -126,21 +126,43 @@ class TestSocialScoreCalculation:
 class TestSearchArxivPapers:
     """Tests for searching arXiv papers on HN."""
 
-    def test_search_returns_papers(self, tracker, mock_algolia_response):
+    def test_search_returns_papers(self, tracker):
         """Test that search returns papers within time range."""
-        with patch.object(tracker, "_search_algolia") as mock_search:
-            mock_search.return_value = mock_algolia_response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "hits": [
+                {
+                    "objectID": "1",
+                    "title": "Paper 1",
+                    "url": "https://arxiv.org/abs/2312.12345",
+                    "points": 100,
+                    "num_comments": 50,
+                    "created_at_i": int(datetime.now().timestamp()),
+                },
+                {
+                    "objectID": "2",
+                    "title": "Paper 2",
+                    "url": "https://arxiv.org/abs/2312.67890",
+                    "points": 75,
+                    "num_comments": 30,
+                    "created_at_i": int(datetime.now().timestamp()),
+                },
+            ]
+        }
 
+        with patch.object(tracker.session, "get", return_value=mock_response):
             papers = tracker.search_arxiv_papers(days_back=7)
 
-            # Should only return papers from last 7 days (first 2)
             assert len(papers) == 2
             assert papers[0]["arxiv_id"] == "2312.12345"
             assert papers[1]["arxiv_id"] == "2312.67890"
 
     def test_search_aggregates_duplicate_posts(self, tracker):
         """Test that multiple posts about same paper are aggregated."""
-        response = {
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
             "hits": [
                 {
                     "objectID": "1",
@@ -161,9 +183,7 @@ class TestSearchArxivPapers:
             ]
         }
 
-        with patch.object(tracker, "_search_algolia") as mock_search:
-            mock_search.return_value = response
-
+        with patch.object(tracker.session, "get", return_value=mock_response):
             papers = tracker.search_arxiv_papers(days_back=7)
 
             # Should aggregate into single entry
@@ -174,9 +194,10 @@ class TestSearchArxivPapers:
 
     def test_search_handles_api_error(self, tracker):
         """Test that API errors return empty list."""
-        with patch.object(tracker, "_search_algolia") as mock_search:
-            mock_search.return_value = None
+        mock_response = MagicMock()
+        mock_response.status_code = 500
 
+        with patch.object(tracker.session, "get", return_value=mock_response):
             papers = tracker.search_arxiv_papers(days_back=7)
 
             assert papers == []

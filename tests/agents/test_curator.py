@@ -70,8 +70,8 @@ def paper_with_signals():
         discovered_by="arxiv",
         concepts=["machine learning"],
         score_components={
-            "hn_score": 250,
-            "hn_comments": 120,
+            "hn_social_score": 0.45,  # Pre-calculated: score>200 (0.30) + comments>100 (0.15)
+            "twitter_social_score": 0.0,
         },
         breakthrough_score=0.85,
     )
@@ -148,7 +148,7 @@ class TestSocialScoring:
         """Test social score for highly engaged paper."""
         curator = CuratorAgent(interests=[])
         score = curator.calculate_social_score(paper_with_signals)
-        # HN score > 200 = 0.30, comments > 100 = 0.15
+        # Uses pre-calculated hn_social_score directly
         assert score == pytest.approx(0.45)
 
     def test_social_score_medium_engagement(self):
@@ -163,11 +163,11 @@ class TestSocialScoring:
             pdf_url="https://example.com/pdf",
             abstract_url="https://example.com/abs",
             discovered_by="arxiv",
-            score_components={"hn_score": 75, "hn_comments": 30},
+            score_components={"hn_social_score": 0.15, "twitter_social_score": 0.0},
         )
         curator = CuratorAgent(interests=[])
         score = curator.calculate_social_score(paper)
-        # HN score > 50 = 0.10, comments > 20 = 0.05
+        # Uses pre-calculated hn_social_score directly
         assert score == pytest.approx(0.15)
 
     def test_social_score_no_signals(self, sample_paper):
@@ -291,7 +291,7 @@ class TestDigestWorthiness:
             abstract_url="https://example.com/abs",
             discovered_by="arxiv",
             concepts=["transformers", "attention"],
-            score_components={"hn_score": 300, "hn_comments": 150},
+            score_components={"hn_social_score": 0.45, "twitter_social_score": 0.0},
             breakthrough_score=0.6,  # Not breakthrough alone
         )
         curator = CuratorAgent(interests=["transformers", "attention"])

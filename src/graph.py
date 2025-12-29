@@ -42,6 +42,18 @@ from src.agents.assessor import assess_papers_batch
 from src.agents.curator import curate_papers_batch
 from src.agents.discovery import discover_papers
 from src.agents.explainer import explain_papers_batch
+from src.agents.radar import (
+    RadarState,
+    assessor_agent_node,
+    curator_agent_node,
+    decision_agent_node,
+    filter_agent_node,
+    log_agent_node,
+    notifier_agent_node,
+    route_decision,
+    scanner_agent_node,
+    strategy_agent_node,
+)
 from src.agents.reader import analyze_papers_batch
 from src.database import get_db_session
 from src.models.paper import Paper
@@ -878,6 +890,146 @@ def run_analysis_pipeline() -> AgentState:
 
     except Exception as e:
         logger.error(f"❌ Analysis pipeline failed: {e}")
+        raise
+
+
+# ============================================================================
+# Radar Workflow - Agentic Paper Monitoring (Milestone 4)
+# ============================================================================
+# Agent implementations are in src/agents/radar/
+# ============================================================================
+
+
+def create_radar_workflow() -> StateGraph:
+    """
+    Create the agentic radar workflow.
+
+    This workflow implements an iterative search pattern:
+    1. StrategyAgent selects search strategy
+    2. ScannerAgent discovers papers
+    3. FilterAgent removes duplicates
+    4. AssessorAgent evaluates breakthrough potential
+    5. CuratorAgent scores and ranks
+    6. DecisionAgent routes to notify/expand/done
+    7. NotifierAgent or LogAgent handles the outcome
+
+    The workflow can loop back to StrategyAgent to try
+    additional strategies if nothing noteworthy is found.
+
+    Returns:
+        Compiled StateGraph ready to execute
+    """
+    logger.info("🏗️  Building agentic radar workflow...")
+
+    workflow = StateGraph(RadarState)
+
+    # Add agent nodes
+    workflow.add_node("strategy_agent", strategy_agent_node)
+    workflow.add_node("scanner_agent", scanner_agent_node)
+    workflow.add_node("filter_agent", filter_agent_node)
+    workflow.add_node("assessor_agent", assessor_agent_node)
+    workflow.add_node("curator_agent", curator_agent_node)
+    workflow.add_node("decision_agent", decision_agent_node)
+    workflow.add_node("notifier_agent", notifier_agent_node)
+    workflow.add_node("log_agent", log_agent_node)
+
+    # Define flow - Discovery phase
+    workflow.set_entry_point("strategy_agent")
+    workflow.add_edge("strategy_agent", "scanner_agent")
+    workflow.add_edge("scanner_agent", "filter_agent")
+
+    # Assessment phase
+    workflow.add_edge("filter_agent", "assessor_agent")
+    workflow.add_edge("assessor_agent", "curator_agent")
+    workflow.add_edge("curator_agent", "decision_agent")
+
+    # Decision phase - conditional routing
+    workflow.add_conditional_edges(
+        "decision_agent",
+        route_decision,
+        {
+            "notify": "notifier_agent",
+            "expand": "strategy_agent",  # Loop back
+            "done": "log_agent",
+        },
+    )
+
+    # Terminal nodes
+    workflow.add_edge("notifier_agent", END)
+    workflow.add_edge("log_agent", END)
+
+    app = workflow.compile()
+
+    logger.info("✅ Radar workflow built successfully!")
+    logger.info(
+        "Flow: Strategy → Scanner → Filter → Assessor → Curator → Decision → [Notify|Expand|Done]"
+    )
+
+    return app
+
+
+def run_radar_workflow(
+    max_iterations: int = 3,
+    breakthrough_threshold: float = 0.6,
+    relevance_threshold: float = 0.5,
+    social_threshold: float = 0.3,
+) -> RadarState:
+    """
+    Run the agentic radar workflow.
+
+    This is the main entry point for the radar system. It:
+    1. Creates the radar workflow
+    2. Initializes state with thresholds
+    3. Executes the iterative search
+    4. Returns final state with results
+
+    Args:
+        max_iterations: Maximum search iterations before stopping
+        breakthrough_threshold: Minimum breakthrough score for notification
+        relevance_threshold: Minimum relevance score for notification
+        social_threshold: Minimum social score for trending papers
+
+    Returns:
+        Final RadarState with all results
+    """
+    logger.info("🚀 Starting agentic radar workflow...")
+    logger.info(
+        f"Thresholds: breakthrough>{breakthrough_threshold}, relevance>{relevance_threshold}, social>{social_threshold}"
+    )
+
+    workflow = create_radar_workflow()
+
+    initial_state: RadarState = {
+        "current_strategy": "",
+        "strategies_tried": [],
+        "iterations": 0,
+        "max_iterations": max_iterations,
+        "papers_seen": [],
+        "current_papers": None,
+        "noteworthy_papers": [],
+        "breakthrough_threshold": breakthrough_threshold,
+        "relevance_threshold": relevance_threshold,
+        "social_threshold": social_threshold,
+        "notification_sent": False,
+        "cycle_stats": {},
+        "errors": [],
+    }
+
+    try:
+        final_state = workflow.invoke(initial_state)
+
+        logger.info("✅ Radar workflow complete!")
+        logger.info(f"Iterations: {final_state.get('iterations', 0)}")
+        logger.info(f"Noteworthy papers: {len(final_state.get('noteworthy_papers', []))}")
+        logger.info(f"Notification sent: {final_state.get('notification_sent', False)}")
+
+        if final_state.get("errors"):
+            logger.warning(f"Errors encountered: {final_state['errors']}")
+
+        return final_state
+
+    except Exception as e:
+        logger.error(f"❌ Radar workflow failed: {e}")
         raise
 
 
