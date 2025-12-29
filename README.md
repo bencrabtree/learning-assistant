@@ -281,7 +281,7 @@ This is a **learning project** focused on understanding:
 
 ### Production Patterns
 - Testing strategies (unit, integration, E2E with 80%+ coverage)
-- Performance optimization (caching, batching, parallel execution)
+- Performance optimization (caching, parallel API calls for ~5x speedup)
 - Monitoring and alerting
 - Automated workflows (scheduled jobs)
 
