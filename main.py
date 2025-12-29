@@ -689,6 +689,53 @@ def handle_favorites(args):
         print("\n" + "=" * 80)
         print("These papers help personalize your recommendations.")
         print("Use --unlike <arxiv_id> to remove a paper from favorites.\n")
+def handle_discover_hn(args):
+    """
+    Discover papers trending on HackerNews.
+
+    This is a "social-first" discovery approach - finds papers that
+    the tech community is actively discussing.
+
+    Example:
+        python main.py --discover-hn
+        python main.py --discover-hn --days 14 --min-hn-score 50
+    """
+    from src.agents.discovery import discover_papers_from_hn
+
+    days_back = args.days
+    min_score = args.min_hn_score
+
+    logger.info(f"Discovering papers from HackerNews (days={days_back}, min_score={min_score})...")
+
+    try:
+        papers = discover_papers_from_hn(days_back=days_back, min_score=min_score)
+
+        if not papers:
+            logger.warning("No papers found from HackerNews")
+            return
+
+        # Display results
+        print("\n" + "=" * 80)
+        print(f"HACKERNEWS DISCOVERY RESULTS ({len(papers)} papers)")
+        print("=" * 80)
+
+        for i, paper in enumerate(papers, 1):
+            hn_score = paper.score_components.get("hn_score", 0) if paper.score_components else 0
+            hn_comments = (
+                paper.score_components.get("hn_comments", 0) if paper.score_components else 0
+            )
+
+            print(f"\n{i}. {paper.title[:70]}...")
+            print(f"   ArXiv: {paper.arxiv_id} | HN: {hn_score} pts, {hn_comments} comments")
+
+        print("\n" + "=" * 80)
+        logger.info(f"✅ Discovered {len(papers)} papers from HackerNews")
+
+    except Exception as e:
+        logger.error(f"❌ HN Discovery failed: {e}")
+        if settings.log_level == "DEBUG":
+            logger.exception("Full traceback:")
+        sys.exit(1)
 
 
 # ============================================================================
@@ -763,6 +810,10 @@ Examples:
 
   # Reset everything
   python main.py --init-db --reset --yes
+
+  # Social-first discovery (papers trending on HackerNews)
+  python main.py --discover-hn                        # Discover papers from HN (default: 7 days, min 10 pts)
+  python main.py --discover-hn --days 14 --min-hn-score 50  # More days, higher threshold
         """,
     )
 
@@ -875,6 +926,22 @@ Examples:
         help="List all favorite/seed papers",
     )
 
+    # ==================== SOCIAL DISCOVERY ====================
+    social_group = parser.add_argument_group(
+        "Social Discovery", "Discover papers from social platforms"
+    )
+    social_group.add_argument(
+        "--discover-hn",
+        action="store_true",
+        help="Discover papers trending on HackerNews",
+    )
+    social_group.add_argument(
+        "--min-hn-score",
+        type=int,
+        default=10,
+        help="Minimum HN score for --discover-hn (default: 10)",
+    )
+
     # ==================== OTHER OPTIONS ====================
     other_group = parser.add_argument_group("Other")
     other_group.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -922,6 +989,8 @@ Examples:
             handle_favorites(args)
         elif args.feedback_server:
             handle_feedback_server(args)
+        elif args.discover_hn:
+            handle_discover_hn(args)
         else:
             # No command specified, show help
             parser.print_help()
