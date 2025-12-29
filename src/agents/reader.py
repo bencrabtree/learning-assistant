@@ -32,6 +32,7 @@ Example:
     # analysis contains structured data about the paper
 """
 
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -296,17 +297,18 @@ IMPORTANT:
             logger.error(f"Failed to analyze {paper.arxiv_id}: {e}")
             return (paper.arxiv_id, None)
 
-    def analyze_and_save(self, papers: list[Paper], max_workers: int = 5) -> int:
+    def analyze_and_save(self, papers: list[Paper], max_workers: int = 3) -> int:
         """
         Analyze papers in parallel and save results to database.
 
         Uses ThreadPoolExecutor to process multiple papers concurrently.
         Each paper's prompt is small (~1-2K tokens), so we can safely
-        run many in parallel without context issues.
+        run a few in parallel without context issues.
 
         Args:
             papers: List of Paper objects
-            max_workers: Maximum concurrent API calls (default: 5)
+            max_workers: Maximum concurrent API calls (default: 3, reduced from 5
+                        to avoid rate limits)
 
         Returns:
             Number of successfully analyzed papers
@@ -333,9 +335,14 @@ IMPORTANT:
                 if analysis:
                     results.append((arxiv_id, analysis))
         else:
-            # Process papers in parallel
+            # Process papers in parallel with staggered submission to avoid rate limits
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(self._analyze_single, paper): paper for paper in papers}
+                futures = {}
+                for i, paper in enumerate(papers):
+                    # Submit tasks with a small delay to avoid initial burst
+                    if i > 0:
+                        time.sleep(0.5)  # 500ms delay between submissions
+                    futures[executor.submit(self._analyze_single, paper)] = paper
 
                 for i, future in enumerate(as_completed(futures), 1):
                     paper = futures[future]
@@ -362,7 +369,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def analyze_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Paper]:
+def analyze_papers_batch(papers: list[Paper], max_workers: int = 3) -> list[Paper]:
     """
     Batch analyze papers and return updated Paper objects.
 
@@ -377,7 +384,7 @@ def analyze_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Pape
 
     Args:
         papers: List of Paper objects to analyze
-        max_workers: Maximum concurrent API calls (default: 5)
+        max_workers: Maximum concurrent API calls (default: 3, reduced to avoid rate limits)
 
     Returns:
         List of Paper objects with analysis fields populated

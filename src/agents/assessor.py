@@ -41,58 +41,33 @@ class AssessorAgent:
         from src.config import settings
 
         self.client = get_claude_client()
-        self.model = settings.explainer_model  # Use Sonnet for quality
+        self.model = settings.reader_model  # Use Haiku for cost efficiency (scoring is structured)
 
     def build_assessment_prompt(self, paper: Paper) -> str:
         """Build the prompt for breakthrough assessment."""
-        return f"""You are an expert research assessor. Evaluate this paper for BREAKTHROUGH potential.
+        return f"""Evaluate this paper for BREAKTHROUGH potential (0-1 scale). Apply high bar - breakthroughs are rare.
 
-Apply a VERY HIGH BAR. Most papers are incremental - true breakthroughs are rare (maybe 1-2% of papers).
+PAPER: {paper.title}
+ABSTRACT: {paper.abstract}
+CLAIM: {paper.main_claim or 'Not analyzed'}
+METHOD: {paper.methodology or 'Not analyzed'}
+CONTRIBUTIONS: {paper.novel_contributions or 'Not analyzed'}
 
-PAPER INFORMATION:
-- ArXiv ID: {paper.arxiv_id}
-- Title: {paper.title}
-- Abstract: {paper.abstract}
-- Main Claim: {paper.main_claim or 'Not analyzed'}
-- Methodology: {paper.methodology or 'Not analyzed'}
-- Novel Contributions: {paper.novel_contributions or 'Not analyzed'}
-- Key Results: {paper.key_results or 'Not analyzed'}
+SCORE (0-1):
+- NOVELTY: 0.9+=new paradigm, 0.7+=novel combo, 0.5+=incremental, 0-0.4=derivative
+- IMPACT: 0.9+=reshape field, 0.7+=influence many, 0.5+=moderate, 0-0.4=niche
+- EVIDENCE: 0.9+=rigorous, 0.7+=good, 0.5+=adequate, 0-0.4=weak
+- SIGNIFICANCE: 0.9+=fundamental, 0.7+=important, 0.5+=useful, 0-0.4=minor
 
-SCORING CRITERIA (0.0 to 1.0 scale):
-
-NOVELTY - How original is this work?
-- 0.9-1.0: Introduces fundamentally new paradigm/approach
-- 0.7-0.8: Significant novel contribution, new combination of ideas
-- 0.5-0.6: Moderate novelty, incremental improvement
-- 0.0-0.4: Mostly derivative, minor variations
-
-IMPACT - Potential to change the field?
-- 0.9-1.0: Could reshape entire research directions
-- 0.7-0.8: Likely to influence many future papers
-- 0.5-0.6: Useful contribution with moderate influence
-- 0.0-0.4: Limited impact, niche application
-
-EVIDENCE - Quality of validation?
-- 0.9-1.0: Rigorous experiments, strong baselines, clear improvements
-- 0.7-0.8: Good experiments, reasonable comparisons
-- 0.5-0.6: Adequate validation, some gaps
-- 0.0-0.4: Weak evidence, missing baselines
-
-SIGNIFICANCE - Importance of the problem?
-- 0.9-1.0: Addresses fundamental challenge in the field
-- 0.7-0.8: Important practical or theoretical problem
-- 0.5-0.6: Useful but not critical problem
-- 0.0-0.4: Minor or already-solved problem
-
-Respond in JSON format:
+JSON format:
 {{
-    "novelty_score": <float 0-1>,
-    "impact_score": <float 0-1>,
-    "evidence_score": <float 0-1>,
-    "significance_score": <float 0-1>,
-    "reasoning": "<2-3 sentence explanation>",
-    "key_strengths": ["<strength 1>", "<strength 2>"],
-    "key_weaknesses": ["<weakness 1>", "<weakness 2>"],
+    "novelty_score": <float>,
+    "impact_score": <float>,
+    "evidence_score": <float>,
+    "significance_score": <float>,
+    "reasoning": "<2-3 sentences>",
+    "key_strengths": ["<2 strengths>"],
+    "key_weaknesses": ["<2 weaknesses>"],
     "read_priority": "<immediate|soon|when_free|skip>"
 }}"""
 

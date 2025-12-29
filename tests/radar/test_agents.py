@@ -139,22 +139,18 @@ class TestScannerAgentNode:
         assert "current_papers" in result
         mock_hn.assert_called_once()
 
-    @patch("src.graph.run_analysis_pipeline")
     @patch("src.agents.discovery.discover_papers_from_hn")
-    def test_scanner_with_hn_discovery_strategy(
-        self, mock_discover, mock_pipeline, empty_state, mock_paper
-    ):
+    def test_scanner_with_hn_discovery_strategy(self, mock_discover, empty_state, mock_paper):
         """Test scanner with hn_discovery strategy."""
         mock_discover.return_value = [mock_paper]
-        mock_pipeline.return_value = {"ranked_papers": [mock_paper]}
         empty_state["current_strategy"] = "hn_discovery"
 
         result = scanner_agent_node(empty_state)
 
         assert "current_papers" in result
         assert len(result["current_papers"]) == 1
+        assert result["current_papers"][0] == mock_paper
         mock_discover.assert_called_once_with(days_back=7, min_score=20)
-        mock_pipeline.assert_called_once()
 
     @patch("src.graph.run_full_pipeline")
     def test_scanner_handles_exception(self, mock_pipeline, empty_state):

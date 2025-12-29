@@ -16,9 +16,10 @@ Why wrap the API?
 - Track API usage and costs
 """
 
+import time
 from typing import Any
 
-from anthropic import Anthropic
+from anthropic import Anthropic, RateLimitError
 from loguru import logger
 
 from src.config import settings
@@ -52,6 +53,40 @@ class ClaudeClient:
         self.api_key = api_key or settings.anthropic_api_key
         self.client = Anthropic(api_key=self.api_key)
         logger.debug("Claude client initialized")
+
+    def _retry_with_backoff(self, func, max_retries: int = 3, initial_delay: float = 1.0):
+        """
+        Retry a function with exponential backoff for rate limit errors.
+
+        Args:
+            func: Function to retry
+            max_retries: Maximum number of retry attempts
+            initial_delay: Initial delay in seconds (doubles each retry)
+
+        Returns:
+            Result from the function
+
+        Raises:
+            Exception: If all retries fail
+        """
+        delay = initial_delay
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except RateLimitError:
+                if attempt == max_retries - 1:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries")
+                    raise
+
+                wait_time = delay * (2**attempt)
+                logger.warning(
+                    f"Rate limit hit, waiting {wait_time:.1f}s before retry "
+                    f"(attempt {attempt + 1}/{max_retries})"
+                )
+                time.sleep(wait_time)
+            except Exception:
+                # Don't retry for non-rate-limit errors
+                raise
 
     def chat(
         self,
@@ -87,36 +122,36 @@ class ClaudeClient:
 
         logger.debug(f"Calling Claude API with model={model}")
 
+        # Build the messages list
+        # Claude's API expects this format:
+        # [{"role": "user", "content": "..."}]
+        messages = [{"role": "user", "content": prompt}]
+
+        # Build API call parameters
+        api_params = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": messages,
+            **kwargs,
+        }
+
+        # Add system parameter if provided
+        # Anthropic API requires: [{"type": "text", "text": "..."}]
+        if system:
+            api_params["system"] = [{"type": "text", "text": system}]
+
         try:
-            # Build the messages list
-            # Claude's API expects this format:
-            # [{"role": "user", "content": "..."}]
-            messages = [{"role": "user", "content": prompt}]
+            # Make the API call with retry logic for rate limits
+            def _make_call():
+                response = self.client.messages.create(**api_params)
+                # Extract the text from the response
+                # Claude returns a Message object with content blocks
+                # We want the text from the first content block
+                return response.content[0].text
 
-            # Build API call parameters
-            api_params = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "messages": messages,
-                **kwargs,
-            }
-
-            # Add system parameter if provided
-            # Anthropic API requires: [{"type": "text", "text": "..."}]
-            if system:
-                api_params["system"] = [{"type": "text", "text": system}]
-
-            # Make the API call
-            response = self.client.messages.create(**api_params)
-
-            # Extract the text from the response
-            # Claude returns a Message object with content blocks
-            # We want the text from the first content block
-            text = response.content[0].text
-
+            text = self._retry_with_backoff(_make_call)
             logger.debug(f"Claude responded with {len(text)} characters")
-
             return text
 
         except Exception as e:

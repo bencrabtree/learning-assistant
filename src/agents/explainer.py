@@ -30,6 +30,7 @@ Example:
     print(explanation["eli5_summary"])
 """
 
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -96,52 +97,25 @@ class ExplainerAgent:
         # Format concepts as a readable list
         concepts_str = ", ".join(paper.concepts) if paper.concepts else "Not specified"
 
-        prompt = f"""Create a learning-friendly explanation of this research paper.
+        prompt = f"""Explain this paper for learners.
 
-PAPER DETAILS:
-Title: {paper.title}
-Categories: {', '.join(paper.categories)}
+PAPER: {paper.title}
+CLAIM: {paper.main_claim}
+METHOD: {paper.methodology}
+RESULTS: {', '.join(paper.key_results) if paper.key_results else 'Not specified'}
+CONTRIBUTIONS: {paper.novel_contributions}
+CONCEPTS: {concepts_str}
 
-TECHNICAL ANALYSIS (from Reader Agent):
-Main Claim: {paper.main_claim}
-Methodology: {paper.methodology}
-Key Results: {', '.join(paper.key_results) if paper.key_results else 'Not specified'}
-Novel Contributions: {paper.novel_contributions}
-Technical Concepts: {concepts_str}
-
-YOUR TASK:
-Help someone learn from this paper by providing:
-
+Return JSON:
 {{
-  "eli5_summary": "A simple 2-3 sentence explanation that anyone could understand. Use analogies or examples. Avoid jargon. Start with 'Imagine...' or 'Think of it like...' if helpful.",
-
-  "key_insight": "The ONE most important thing to remember about this paper (1 sentence). What's the big breakthrough or main idea?",
-
-  "learning_questions": [
-    "3-5 thought-provoking questions someone should think about while reading this paper",
-    "Questions should help connect to prior knowledge or explore implications",
-    "Examples: 'How does this compare to X?', 'Why is this better than Y?', 'What problems does this solve?'"
-  ],
-
-  "prerequisites": [
-    "2-4 concepts or topics someone should understand BEFORE reading this paper",
-    "Be specific: not just 'machine learning' but 'how attention mechanisms work'",
-    "Order from most fundamental to more advanced"
-  ],
-
-  "related_concepts": [
-    "3-5 related topics to explore AFTER understanding this paper",
-    "These should be natural next steps for learning",
-    "Examples: related papers, techniques, applications, extensions"
-  ]
+  "eli5_summary": "2-3 sentence simple explanation. Use analogies, avoid jargon.",
+  "key_insight": "The ONE most important takeaway (1 sentence).",
+  "learning_questions": ["3-5 thought-provoking questions to guide understanding"],
+  "prerequisites": ["2-4 specific concepts to learn first (e.g., 'how attention works')"],
+  "related_concepts": ["3-5 related topics for further study"]
 }}
 
-IMPORTANT:
-- Write for curious learners, not experts
-- Be encouraging and accessible
-- Focus on understanding, not just facts
-- Make connections to things people might already know
-- Spark curiosity!
+Write for learners. Be clear, encouraging, and spark curiosity.
 """
 
         return prompt
@@ -337,7 +311,7 @@ IMPORTANT:
             logger.error(f"Failed to explain {paper.arxiv_id}: {e}")
             return (paper.arxiv_id, None, False)
 
-    def explain_and_save(self, papers: list[Paper], max_workers: int = 5) -> int:
+    def explain_and_save(self, papers: list[Paper], max_workers: int = 3) -> int:
         """
         Explain papers in parallel and save results to database.
 
@@ -347,7 +321,7 @@ IMPORTANT:
 
         Args:
             papers: List of Paper objects (must be analyzed)
-            max_workers: Maximum concurrent API calls (default: 5)
+            max_workers: Maximum concurrent API calls (default: 3, reduced to avoid rate limits)
 
         Returns:
             Number of successfully explained papers
@@ -380,9 +354,14 @@ IMPORTANT:
                 elif explanation:
                     results.append((arxiv_id, explanation))
         else:
-            # Process papers in parallel
+            # Process papers in parallel with staggered submission to avoid rate limits
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(self._explain_single, paper): paper for paper in papers}
+                futures = {}
+                for i, paper in enumerate(papers):
+                    # Submit tasks with a small delay to avoid initial burst
+                    if i > 0:
+                        time.sleep(0.5)  # 500ms delay between submissions
+                    futures[executor.submit(self._explain_single, paper)] = paper
 
                 for i, future in enumerate(as_completed(futures), 1):
                     paper = futures[future]
@@ -414,7 +393,7 @@ IMPORTANT:
 # ============================================================================
 
 
-def explain_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Paper]:
+def explain_papers_batch(papers: list[Paper], max_workers: int = 3) -> list[Paper]:
     """
     Batch explain papers and return updated Paper objects.
 
@@ -422,7 +401,7 @@ def explain_papers_batch(papers: list[Paper], max_workers: int = 5) -> list[Pape
 
     Args:
         papers: List of analyzed Paper objects
-        max_workers: Maximum concurrent API calls (default: 5)
+        max_workers: Maximum concurrent API calls (default: 3, reduced to avoid rate limits)
 
     Returns:
         List of Paper objects with explanation fields populated
