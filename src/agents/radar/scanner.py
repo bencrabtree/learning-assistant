@@ -3,9 +3,10 @@ ScannerAgent - Executes the search strategy.
 
 This agent discovers papers based on the current strategy:
 - recent_2_days: Last 2 days of arXiv papers
+- hn_discovery: Discover new papers trending on HackerNews
 - recent_7_days: Last 7 days
 - recent_14_days: Last 14 days
-- trending_social: Focus on HN/Twitter trending papers
+- trending_social: Focus on HN/Twitter trending papers in database
 - lower_threshold: Use relaxed scoring thresholds
 """
 
@@ -46,6 +47,7 @@ def scanner_agent_node(state: RadarState) -> RadarState:
         # Determine days_back based on strategy
         days_map = {
             "recent_2_days": 2,
+            "hn_discovery": 7,  # Check last week of HN
             "recent_7_days": 7,
             "recent_14_days": 14,
             "trending_social": 7,
@@ -54,8 +56,22 @@ def scanner_agent_node(state: RadarState) -> RadarState:
         days_back = days_map.get(strategy, 2)
 
         # Run discovery pipeline
-        if strategy == "trending_social":
-            # Focus on social signals - get HN trending papers
+        if strategy == "hn_discovery":
+            # Social-first discovery: Find NEW papers trending on HackerNews
+            from src.agents.discovery import discover_papers_from_hn
+
+            logger.info("Discovering papers from HackerNews (min_score=20)")
+            papers = discover_papers_from_hn(days_back=days_back, min_score=20)
+            logger.info(f"Found {len(papers)} papers from HN")
+
+            # Run full pipeline on these papers to analyze and rank them
+            if papers:
+                from src.graph import run_analysis_pipeline
+
+                result = run_analysis_pipeline()
+                papers = result.get("ranked_papers", []) or result.get("final_papers", []) or []
+        elif strategy == "trending_social":
+            # Focus on social signals - get HN trending papers from database
             from sqlalchemy import or_
 
             from src.trackers.hackernews import fetch_hn_signals

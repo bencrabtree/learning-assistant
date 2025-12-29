@@ -67,6 +67,7 @@ class RadarState(TypedDict):
 # Expansion strategies in order of preference
 RADAR_STRATEGIES = [
     "recent_2_days",
+    "hn_discovery",  # Social-first discovery from HackerNews
     "recent_7_days",
     "recent_14_days",
     "trending_social",

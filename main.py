@@ -689,6 +689,8 @@ def handle_favorites(args):
         print("\n" + "=" * 80)
         print("These papers help personalize your recommendations.")
         print("Use --unlike <arxiv_id> to remove a paper from favorites.\n")
+
+
 def handle_discover_hn(args):
     """
     Discover papers trending on HackerNews.
