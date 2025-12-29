@@ -28,7 +28,14 @@ def strategy_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with selected strategy
     """
-    logger.info("🎯 StrategyAgent - Selecting search strategy...")
+    logger.info(
+        """
+╔═╗╔╦╗╦═╗╔═╗╔╦╗╔═╗╔═╗╦ ╦
+╚═╗ ║ ╠╦╝╠═╣ ║ ║╣ ║ ╦╚╦╝
+╚═╝ ╩ ╩╚═╩ ╩ ╩ ╚═╝╚═╝ ╩  AGENT
+    """
+    )
+    logger.info("🎯 Selecting search strategy...")
 
     strategies_tried = state.get("strategies_tried", [])
     iterations = state.get("iterations", 0)

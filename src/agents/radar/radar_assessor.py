@@ -24,7 +24,14 @@ def assessor_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with assessed papers
     """
-    logger.info("🎯 AssessorAgent - Evaluating breakthrough potential...")
+    logger.info(
+        """
+╔═╗╔═╗╔═╗╔═╗╔═╗╔═╗╔═╗╦═╗
+╠═╣╚═╗╚═╗║╣ ╚═╗╚═╗║ ║╠╦╝
+╩ ╩╚═╝╚═╝╚═╝╚═╝╚═╝╚═╝╩╚═ AGENT
+    """
+    )
+    logger.info("🎯 Evaluating breakthrough potential...")
 
     current_papers = state.get("current_papers", []) or []
 

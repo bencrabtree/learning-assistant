@@ -54,7 +54,14 @@ def decision_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with noteworthy papers and strategies_tried
     """
-    logger.info("🤔 DecisionAgent - Evaluating findings...")
+    logger.info(
+        """
+╔╦╗╔═╗╔═╗╦╔═╗╦╔═╗╔╗╔
+ ║║║╣ ║  ║╚═╗║║ ║║║║
+═╩╝╚═╝╚═╝╩╚═╝╩╚═╝╝╚╝ AGENT
+    """
+    )
+    logger.info("🤔 Evaluating findings...")
 
     current_papers = state.get("current_papers", []) or []
     noteworthy = list(state.get("noteworthy_papers", []))

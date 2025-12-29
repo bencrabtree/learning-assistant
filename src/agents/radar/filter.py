@@ -25,7 +25,14 @@ def filter_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with filtered papers and updated papers_seen
     """
-    logger.info("🔎 FilterAgent - Removing duplicates...")
+    logger.info(
+        """
+╔═╗╦╦ ╔╦╗╔═╗╦═╗
+╠╣ ║║  ║ ║╣ ╠╦╝
+╚  ╩╩═╝╩ ╚═╝╩╚═ AGENT
+    """
+    )
+    logger.info("🔎 Removing duplicates...")
 
     current_papers = state.get("current_papers", []) or []
     papers_seen = set(state.get("papers_seen", []))

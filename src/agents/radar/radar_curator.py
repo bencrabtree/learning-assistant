@@ -24,7 +24,14 @@ def curator_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with curated/ranked papers
     """
-    logger.info("📊 CuratorAgent - Scoring and ranking...")
+    logger.info(
+        """
+╔═╗╦ ╦╦═╗╔═╗╔╦╗╔═╗╦═╗
+║  ║ ║╠╦╝╠═╣ ║ ║ ║╠╦╝
+╚═╝╚═╝╩╚═╩ ╩ ╩ ╚═╝╩╚═ AGENT
+    """
+    )
+    logger.info("📊 Scoring and ranking...")
 
     current_papers = state.get("current_papers", []) or []
 

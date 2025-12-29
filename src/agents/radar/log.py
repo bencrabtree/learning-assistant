@@ -25,7 +25,14 @@ def log_agent_node(state: RadarState) -> RadarState:
     Returns:
         Unchanged state (terminal node)
     """
-    logger.info("📝 LogAgent - Logging cycle results...")
+    logger.info(
+        """
+╦  ╔═╗╔═╗
+║  ║ ║║ ╦
+╩═╝╚═╝╚═╝ AGENT
+    """
+    )
+    logger.info("📝 Logging cycle results...")
 
     iterations = state.get("iterations", 0)
     strategies_tried = state.get("strategies_tried", [])

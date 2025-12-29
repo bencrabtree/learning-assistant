@@ -31,7 +31,14 @@ def scanner_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with discovered papers
     """
-    logger.info("🔍 ScannerAgent - Executing search...")
+    logger.info(
+        """
+╔═╗╔═╗╔═╗╔╗╔╔╗╔╔═╗╦═╗
+╚═╗║  ╠═╣║║║║║║║╣ ╠╦╝
+╚═╝╚═╝╩ ╩╝╚╝╝╚╝╚═╝╩╚═ AGENT
+    """
+    )
+    logger.info("🔍 Executing search...")
 
     strategy = state.get("current_strategy", "recent_2_days")
 

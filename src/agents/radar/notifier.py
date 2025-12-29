@@ -24,7 +24,14 @@ def notifier_agent_node(state: RadarState) -> RadarState:
     Returns:
         Updated state with notification_sent status
     """
-    logger.info("📧 NotifierAgent - Sending notification...")
+    logger.info(
+        """
+╔╗╔╔═╗╔╦╗╦╔═╗╦ ╦
+║║║║ ║ ║ ║╠╣ ╚╦╝
+╝╚╝╚═╝ ╩ ╩╚   ╩  AGENT
+    """
+    )
+    logger.info("📧 Sending notification...")
 
     noteworthy = state.get("noteworthy_papers", [])
 
