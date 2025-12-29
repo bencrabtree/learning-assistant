@@ -365,6 +365,148 @@ def save_papers_to_db(papers: list[dict]) -> int:
     return agent.save_papers(papers)
 
 
+def discover_papers_from_hn(
+    days_back: int = 7,
+    min_score: int = 10,
+) -> list[Paper]:
+    """
+    Discover papers trending on HackerNews.
+
+    This is a "social-first" discovery approach - instead of browsing arXiv
+    categories, we find papers that the tech community is already discussing.
+
+    Flow:
+    1. Fetch HN posts mentioning arXiv (via HackerNews tracker)
+    2. Filter by minimum score
+    3. Extract arXiv IDs not already in database
+    4. Fetch metadata from arXiv API for new papers
+    5. Save with discovered_by="hackernews"
+    6. Store HN signals in score_components
+
+    Args:
+        days_back: How many days back to search HN (default: 7)
+        min_score: Minimum HN score to include (default: 10)
+
+    Returns:
+        List of Paper objects discovered from HN
+
+    Example:
+        # Find papers trending on HN in the last week
+        papers = discover_papers_from_hn(days_back=7, min_score=10)
+    """
+    from src.trackers.hackernews import fetch_hn_signals
+
+    logger.info(
+        f"Discovering papers from HackerNews (days_back={days_back}, min_score={min_score})"
+    )
+
+    # Step 1: Get HN posts mentioning arXiv
+    hn_papers = fetch_hn_signals(days_back=days_back)
+    logger.info(f"Found {len(hn_papers)} arXiv papers mentioned on HN")
+
+    # Step 2: Filter by minimum score
+    hn_papers = [p for p in hn_papers if p.get("score", 0) >= min_score]
+    logger.info(f"After min_score filter: {len(hn_papers)} papers")
+
+    if not hn_papers:
+        logger.warning("No papers meet the minimum score threshold")
+        return []
+
+    # Step 3: Find papers not already in database
+    arxiv_ids = [p["arxiv_id"] for p in hn_papers]
+
+    with get_db_session() as db:
+        existing_ids = {
+            p.arxiv_id for p in db.query(Paper.arxiv_id).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+        }
+
+    new_arxiv_ids = [aid for aid in arxiv_ids if aid not in existing_ids]
+    logger.info(
+        f"New papers to fetch: {len(new_arxiv_ids)} (skipping {len(existing_ids)} existing)"
+    )
+
+    # Build mapping of arxiv_id -> HN data for later
+    hn_data_map = {p["arxiv_id"]: p for p in hn_papers}
+
+    # Step 4: Fetch metadata from arXiv API for new papers
+    new_papers_count = 0
+    discovered_papers = []
+
+    if new_arxiv_ids:
+        try:
+            # Query arXiv API for the specific papers
+            search = arxiv.Search(id_list=new_arxiv_ids)
+
+            with get_db_session() as db:
+                for result in search.results():
+                    arxiv_id = result.entry_id.split("/")[-1]
+                    hn_data = hn_data_map.get(arxiv_id, {})
+
+                    # Build score_components with HN signals
+                    score_components = {
+                        "hn_score": hn_data.get("score", 0),
+                        "hn_comments": hn_data.get("comments_count", 0),
+                        "hn_posts": len(hn_data.get("posts", [])),
+                        "social_score": hn_data.get("social_score", 0),
+                    }
+
+                    paper = Paper(
+                        arxiv_id=arxiv_id,
+                        title=result.title.strip(),
+                        abstract=result.summary.strip(),
+                        authors=[author.name for author in result.authors],
+                        published_date=result.published,
+                        categories=result.categories,
+                        pdf_url=result.pdf_url,
+                        abstract_url=result.entry_id,
+                        discovered_by="hackernews",
+                        score_components=score_components,
+                    )
+
+                    db.add(paper)
+                    new_papers_count += 1
+                    logger.debug(
+                        f"Added from HN: {paper.title[:50]}... "
+                        f"(HN score: {hn_data.get('score', 0)})"
+                    )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch arXiv metadata: {e}")
+            raise
+
+    # Step 5: Update existing papers with HN signals
+    updated_count = 0
+    if existing_ids:
+        with get_db_session() as db:
+            for arxiv_id in existing_ids:
+                paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+                if paper:
+                    hn_data = hn_data_map.get(arxiv_id, {})
+
+                    # Update or create score_components
+                    components = paper.score_components or {}
+                    components.update(
+                        {
+                            "hn_score": hn_data.get("score", 0),
+                            "hn_comments": hn_data.get("comments_count", 0),
+                            "hn_posts": len(hn_data.get("posts", [])),
+                            "social_score": hn_data.get("social_score", 0),
+                        }
+                    )
+                    paper.score_components = components
+                    updated_count += 1
+
+    # Step 6: Return all matching papers (new + existing with HN signals)
+    with get_db_session() as db:
+        discovered_papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+
+    logger.info(
+        f"✅ HN Discovery complete! "
+        f"{new_papers_count} new papers, {updated_count} updated with HN signals"
+    )
+    return discovered_papers
+
+
 if __name__ == "__main__":
     # Test the discovery agent
     print("Testing arXiv Discovery Agent...")

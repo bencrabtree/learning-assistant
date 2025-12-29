@@ -90,7 +90,8 @@ class TestStrategyAgentIntegration:
 
         result = strategy_agent_node(state)
 
-        assert result["current_strategy"] == "recent_7_days"
+        # After recent_2_days, should try hn_discovery (2nd strategy in list)
+        assert result["current_strategy"] == "hn_discovery"
         assert result["current_strategy"] not in state["strategies_tried"]
 
 
