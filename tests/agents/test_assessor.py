@@ -129,8 +129,8 @@ class TestAssessorAgent:
             assert "SIGNIFICANCE" in prompt
 
             # Verify high bar messaging
-            assert "HIGH BAR" in prompt
-            assert "1-2%" in prompt or "rare" in prompt.lower()
+            assert "high bar" in prompt.lower()
+            assert "rare" in prompt.lower()
 
     def test_assess_paper_breakthrough(self, sample_paper, mock_breakthrough_response):
         """Test assessment of a breakthrough paper."""

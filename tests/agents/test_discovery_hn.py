@@ -154,6 +154,76 @@ class TestDiscoverPapersFromHN:
 
             mock_fetch.assert_called_once_with(days_back=14)
 
+    def test_handles_arxiv_version_mismatch_gracefully(self, db_session):
+        """
+        Test that duplicate papers are handled when arXiv returns a different version.
+
+        Bug scenario:
+        - HackerNews post has arxiv_id "1902.01989" (without version)
+        - Paper already exists in DB as "1902.01989v2"
+        - arXiv API returns "1902.01989v2" (latest version)
+        - Should gracefully skip duplicate instead of raising IntegrityError
+        """
+        # Create existing paper with version suffix
+        with db_session() as db:
+            existing = Paper(
+                arxiv_id="1902.01989v2",
+                title="Existing Paper v2",
+                abstract="Abstract",
+                authors=["Author"],
+                published_date=datetime.now(UTC),
+                categories=["physics.hist-ph"],
+                pdf_url="http://example.com/pdf",
+                abstract_url="http://example.com/abs",
+                discovered_by="arxiv",
+            )
+            db.add(existing)
+
+        # HN has the paper without version suffix
+        hn_papers = [
+            {
+                "arxiv_id": "1902.01989",  # No version suffix
+                "score": 100,
+                "comments_count": 50,
+                "posts": ["123"],
+                "social_score": 0.3,
+            },
+        ]
+
+        # Mock arXiv to return the versioned ID
+        mock_result = MagicMock()
+        mock_result.entry_id = "http://arxiv.org/abs/1902.01989v2"
+        mock_result.title = "Existing Paper v2"
+        mock_result.summary = "Abstract"
+        mock_result.authors = [MagicMock()]
+        mock_result.authors[0].name = "Author"
+        mock_result.published = datetime.now(UTC)
+        mock_result.categories = ["physics.hist-ph"]
+        mock_result.pdf_url = "http://arxiv.org/pdf/1902.01989v2"
+
+        mock_search = MagicMock()
+        mock_search.results.return_value = iter([mock_result])
+
+        with (
+            patch("src.trackers.hackernews.fetch_hn_signals") as mock_fetch,
+            patch("src.agents.discovery.arxiv.Search", return_value=mock_search),
+            patch("src.agents.discovery.get_db_session", db_session),
+        ):
+            mock_fetch.return_value = hn_papers
+
+            # Should not raise IntegrityError
+            papers = discover_papers_from_hn(days_back=7, min_score=10)
+
+        # Should return the existing paper (updated with HN signals)
+        assert len(papers) == 1
+        assert papers[0].arxiv_id == "1902.01989v2"
+
+        # Verify HN signals were updated
+        with db_session() as db:
+            paper = db.query(Paper).filter_by(arxiv_id="1902.01989v2").first()
+            assert paper.score_components["hn_score"] == 100
+            assert paper.score_components["hn_comments"] == 50
+
 
 class TestDiscoverPapersFromHNIntegration:
     """Integration tests for HN discovery (marked for slower execution)."""

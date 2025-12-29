@@ -63,13 +63,7 @@ def scanner_agent_node(state: RadarState) -> RadarState:
             logger.info("Discovering papers from HackerNews (min_score=20)")
             papers = discover_papers_from_hn(days_back=days_back, min_score=20)
             logger.info(f"Found {len(papers)} papers from HN")
-
-            # Run full pipeline on these papers to analyze and rank them
-            if papers:
-                from src.graph import run_analysis_pipeline
-
-                result = run_analysis_pipeline()
-                papers = result.get("ranked_papers", []) or result.get("final_papers", []) or []
+            # Papers will be analyzed by the radar workflow's reader/explainer nodes
         elif strategy == "trending_social":
             # Focus on social signals - get HN trending papers from database
             from sqlalchemy import or_

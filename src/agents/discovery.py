@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import arxiv
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from src.config import get_arxiv_categories_list, settings
 from src.database import get_db_session
@@ -212,11 +213,15 @@ class DiscoveryAgent:
 
                 # Add to session
                 # This stages the paper for insertion
-                # The actual INSERT happens when we commit (automatically at end of with block)
-                db.add(paper)
-                new_papers_count += 1
-
-                logger.debug(f"Added paper: {paper.title[:50]}...")
+                # Force immediate flush to catch IntegrityError during the loop
+                try:
+                    db.add(paper)
+                    db.flush()  # Force immediate insert to catch IntegrityError now
+                    new_papers_count += 1
+                    logger.debug(f"Added paper: {paper.title[:50]}...")
+                except IntegrityError:
+                    db.rollback()
+                    logger.warning(f"Paper {arxiv_id} already exists (race condition), skipping")
 
             # Commit happens automatically when we exit the with block
             # All papers are inserted in a single transaction
@@ -431,6 +436,7 @@ def discover_papers_from_hn(
     # Step 4: Fetch metadata from arXiv API for new papers
     new_papers_count = 0
     discovered_papers = []
+    all_arxiv_ids = set()  # Track all actual arxiv_ids (with versions)
 
     if new_arxiv_ids:
         try:
@@ -440,7 +446,9 @@ def discover_papers_from_hn(
             with get_db_session() as db:
                 for result in search.results():
                     arxiv_id = result.entry_id.split("/")[-1]
-                    hn_data = hn_data_map.get(arxiv_id, {})
+                    # Strip version suffix for HN data lookup (e.g., "1902.01989v2" -> "1902.01989")
+                    arxiv_id_base = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+                    hn_data = hn_data_map.get(arxiv_id_base, {})
 
                     # Build score_components with HN signals
                     score_components = {
@@ -463,12 +471,21 @@ def discover_papers_from_hn(
                         score_components=score_components,
                     )
 
-                    db.add(paper)
-                    new_papers_count += 1
-                    logger.debug(
-                        f"Added from HN: {paper.title[:50]}... "
-                        f"(HN score: {hn_data.get('score', 0)})"
-                    )
+                    try:
+                        db.add(paper)
+                        db.flush()  # Force immediate insert to catch IntegrityError now
+                        new_papers_count += 1
+                        all_arxiv_ids.add(arxiv_id)
+                        logger.debug(
+                            f"Added from HN: {paper.title[:50]}... "
+                            f"(HN score: {hn_data.get('score', 0)})"
+                        )
+                    except IntegrityError:
+                        db.rollback()
+                        logger.debug(f"Paper {arxiv_id} already exists, skipping")
+                        # Add to existing_ids so it gets updated below
+                        existing_ids.add(arxiv_id)
+                        all_arxiv_ids.add(arxiv_id)
 
         except Exception as e:
             logger.error(f"Failed to fetch arXiv metadata: {e}")
@@ -481,7 +498,9 @@ def discover_papers_from_hn(
             for arxiv_id in existing_ids:
                 paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
                 if paper:
-                    hn_data = hn_data_map.get(arxiv_id, {})
+                    # Strip version suffix for HN data lookup
+                    arxiv_id_base = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+                    hn_data = hn_data_map.get(arxiv_id_base, {})
 
                     # Update or create score_components
                     components = paper.score_components or {}
@@ -498,7 +517,10 @@ def discover_papers_from_hn(
 
     # Step 6: Return all matching papers (new + existing with HN signals)
     with get_db_session() as db:
-        discovered_papers = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+        if all_arxiv_ids:
+            discovered_papers = db.query(Paper).filter(Paper.arxiv_id.in_(all_arxiv_ids)).all()
+        else:
+            discovered_papers = []
 
     logger.info(
         f"✅ HN Discovery complete! "
