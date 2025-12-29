@@ -14,29 +14,20 @@ from src.models.paper import Paper
 
 
 def _get_social_score(paper: Paper) -> float:
-    """Calculate social score from paper's score components."""
+    """Get combined social score from HN and Twitter signals.
+
+    Uses pre-calculated social scores stored in score_components.
+    Returns the maximum of HN and Twitter scores (not sum, to avoid double-counting).
+    """
     if not paper.score_components:
         return 0.0
 
-    hn_score = paper.score_components.get("hn_score", 0)
-    hn_comments = paper.score_components.get("hn_comments", 0)
+    # Use pre-calculated scores from signal node
+    hn_social = paper.score_components.get("hn_social_score", 0.0)
+    twitter_social = paper.score_components.get("twitter_social_score", 0.0)
 
-    score = 0.0
-    if hn_score > 200:
-        score += 0.30
-    elif hn_score > 100:
-        score += 0.20
-    elif hn_score > 50:
-        score += 0.10
-
-    if hn_comments > 100:
-        score += 0.15
-    elif hn_comments > 50:
-        score += 0.10
-    elif hn_comments > 20:
-        score += 0.05
-
-    return min(score, 0.5)
+    # Return max score (a paper trending on either platform is noteworthy)
+    return max(hn_social, twitter_social)
 
 
 def decision_agent_node(state: RadarState) -> RadarState:
