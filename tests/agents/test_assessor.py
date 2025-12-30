@@ -128,10 +128,6 @@ class TestAssessorAgent:
             assert "EVIDENCE" in prompt
             assert "SIGNIFICANCE" in prompt
 
-            # Verify high bar messaging
-            assert "high bar" in prompt.lower()
-            assert "rare" in prompt.lower()
-
     def test_assess_paper_breakthrough(self, sample_paper, mock_breakthrough_response):
         """Test assessment of a breakthrough paper."""
         with patch("src.agents.assessor.get_claude_client") as mock_get_client:
@@ -327,15 +323,16 @@ class TestBatchFunctions:
 class TestPromptEngineering:
     """Tests for prompt quality."""
 
-    def test_prompt_enforces_high_bar(self, sample_paper):
-        """Test that prompt emphasizes high bar for breakthroughs."""
+    def test_prompt_includes_scoring_guidance(self, sample_paper):
+        """Test that prompt includes scoring guidance for assessments."""
         with patch("src.agents.assessor.get_claude_client"):
             assessor = AssessorAgent()
             prompt = assessor.build_assessment_prompt(sample_paper)
 
-            # Should emphasize rarity
-            assert "HIGH BAR" in prompt or "high bar" in prompt.lower()
-            assert "rare" in prompt.lower() or "1-2%" in prompt
+            # Should include guidance on being generous for important work
+            assert "generous" in prompt.lower() or "important" in prompt.lower()
+            # Should mention major model releases as high-impact examples
+            assert "GPT-4" in prompt or "DeepSeek" in prompt or "major" in prompt.lower()
 
     def test_prompt_includes_scoring_rubric(self, sample_paper):
         """Test that prompt includes detailed scoring rubric."""
@@ -343,6 +340,7 @@ class TestPromptEngineering:
             assessor = AssessorAgent()
             prompt = assessor.build_assessment_prompt(sample_paper)
 
-            # Should have score ranges
-            assert "0.9" in prompt or "0.8" in prompt
-            assert "0.0" in prompt or "0.4" in prompt
+            # Should have score ranges for high scores
+            assert "0.95+" in prompt or "0.85+" in prompt
+            # Should have score ranges for low scores
+            assert "<0.50" in prompt or "0.50+" in prompt

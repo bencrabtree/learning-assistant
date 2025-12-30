@@ -36,16 +36,20 @@ class AssessorAgent:
     # Threshold for breakthrough classification
     BREAKTHROUGH_THRESHOLD = 0.8
 
+    # Bonus applied to papers the user has explicitly favorited
+    FAVORITE_BOOST = 0.08  # +8% for favorites
+
     def __init__(self):
         """Initialize the assessor agent."""
         from src.config import settings
 
         self.client = get_claude_client()
-        self.model = settings.reader_model  # Use Haiku for cost efficiency (scoring is structured)
+        # Use Sonnet for better judgment on breakthrough potential
+        self.model = settings.explainer_model
 
     def build_assessment_prompt(self, paper: Paper) -> str:
         """Build the prompt for breakthrough assessment."""
-        return f"""Evaluate this paper for BREAKTHROUGH potential (0-1 scale). Apply high bar - breakthroughs are rare.
+        return f"""Evaluate this paper's significance on a 0-1 scale. Be generous for genuinely important work.
 
 PAPER: {paper.title}
 ABSTRACT: {paper.abstract}
@@ -53,11 +57,35 @@ CLAIM: {paper.main_claim or 'Not analyzed'}
 METHOD: {paper.methodology or 'Not analyzed'}
 CONTRIBUTIONS: {paper.novel_contributions or 'Not analyzed'}
 
-SCORE (0-1):
-- NOVELTY: 0.9+=new paradigm, 0.7+=novel combo, 0.5+=incremental, 0-0.4=derivative
-- IMPACT: 0.9+=reshape field, 0.7+=influence many, 0.5+=moderate, 0-0.4=niche
-- EVIDENCE: 0.9+=rigorous, 0.7+=good, 0.5+=adequate, 0-0.4=weak
-- SIGNIFICANCE: 0.9+=fundamental, 0.7+=important, 0.5+=useful, 0-0.4=minor
+SCORING GUIDE (0-1):
+
+NOVELTY - How new/original is this?
+- 0.95+: Introduces new paradigm, technique, or architecture that others will build on (e.g., Transformers, RLHF, GRPO, Chain-of-Thought)
+- 0.85+: Novel combination or significant extension of existing ideas with clear innovation
+- 0.70+: Solid contribution with some novel elements
+- 0.50+: Incremental improvement on known approaches
+- <0.50: Derivative or rehashing existing work
+
+IMPACT - Will this influence the field?
+- 0.95+: Major model release (GPT-4, Claude, Llama, DeepSeek-R1, Qwen) or technique that will be widely adopted
+- 0.85+: Will likely influence many follow-up papers and practitioners
+- 0.70+: Will influence researchers in this subfield
+- 0.50+: Useful but limited influence
+- <0.50: Niche interest only
+
+EVIDENCE - Quality of validation?
+- 0.90+: Comprehensive benchmarks, ablations, and real-world validation
+- 0.75+: Strong empirical results with good experimental design
+- 0.60+: Adequate experiments supporting claims
+- <0.60: Weak or missing evidence
+
+SIGNIFICANCE - How important is the problem?
+- 0.95+: Addresses fundamental challenge in AI (reasoning, safety, efficiency, generalization)
+- 0.80+: Important practical problem with broad applications
+- 0.60+: Useful problem in a specific domain
+- <0.60: Minor or already-solved problem
+
+NOTE: Major model releases and papers introducing widely-used techniques should score 0.90+ on impact.
 
 JSON format:
 {{
@@ -102,6 +130,14 @@ JSON format:
                 + self.WEIGHT_EVIDENCE * response.get("evidence_score", 0.5)
                 + self.WEIGHT_SIGNIFICANCE * response.get("significance_score", 0.5)
             )
+
+            # Apply favorite boost if user has marked this paper as important
+            if paper.is_favorite:
+                breakthrough_score = min(1.0, breakthrough_score + self.FAVORITE_BOOST)
+                logger.debug(
+                    f"Applied favorite boost (+{self.FAVORITE_BOOST:.0%}) to {paper.arxiv_id}"
+                )
+
             response["breakthrough_score"] = breakthrough_score
             response["is_breakthrough"] = breakthrough_score >= self.BREAKTHROUGH_THRESHOLD
 

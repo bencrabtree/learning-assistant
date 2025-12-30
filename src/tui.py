@@ -106,8 +106,16 @@ class PaperDetailScreen(Screen):
 
     def _format_metadata(self) -> str:
         """Format paper metadata."""
+        # Format scores
+        bt_score = (
+            f"{self.paper.breakthrough_score:.0%}" if self.paper.breakthrough_score else "N/A"
+        )
+        rel_score = f"{self.paper.relevance_score:.0%}" if self.paper.relevance_score else "N/A"
+        fav_indicator = "★ FAVORITE" if self.paper.is_favorite else ""
+
         lines = [
             f"[bold white]{self.paper.title}[/bold white]",
+            f"\n[bold yellow]Breakthrough: {bt_score}[/bold yellow] | [bold cyan]Relevance: {rel_score}[/bold cyan] {fav_indicator}",
             f"\n[dim]ArXiv ID:[/dim] {self.paper.arxiv_id}",
             f"[dim]Authors:[/dim] {', '.join(self.paper.authors[:3])}{'...' if len(self.paper.authors) > 3 else ''}",
             f"[dim]Published:[/dim] {self.paper.published_date.date()}",
@@ -324,8 +332,8 @@ class PaperExplorerApp(App):
         """Initialize the table when app starts."""
         table = self.query_one(DataTable)
 
-        # Add columns
-        table.add_columns("Title", "Status", "Key Concepts")
+        # Add columns with score columns
+        table.add_columns("⭐", "Breakthrough", "Relevance", "Title", "Status", "Concepts")
         table.cursor_type = "row"
 
         # Load papers from database
@@ -336,14 +344,30 @@ class PaperExplorerApp(App):
         table = self.query_one(DataTable)
 
         with get_db_session() as db:
-            # Get all papers ordered by most recent first
-            papers = db.query(Paper).order_by(Paper.discovered_at.desc()).all()
+            # Get all papers ordered by breakthrough score (best to worst)
+            papers = (
+                db.query(Paper)
+                .order_by(
+                    Paper.breakthrough_score.desc().nulls_last(),
+                    Paper.relevance_score.desc().nulls_last(),
+                )
+                .all()
+            )
 
             # Get reading statuses
             reading_progress = db.query(ReadingProgress).all()
             self.reading_statuses = {rp.paper_id: rp.status for rp in reading_progress}
 
             for paper in papers:
+                # Favorite indicator
+                fav = "★" if paper.is_favorite else ""
+
+                # Breakthrough score
+                bt_score = f"{paper.breakthrough_score:.0%}" if paper.breakthrough_score else "-"
+
+                # Relevance score
+                rel_score = f"{paper.relevance_score:.0%}" if paper.relevance_score else "-"
+
                 # Determine status
                 status_parts = []
 
@@ -367,23 +391,23 @@ class PaperExplorerApp(App):
 
                 status = " ".join(status_parts)
 
-                # Get key concepts (limit to 3 for display)
+                # Get key concepts (limit to 2 for display)
                 if paper.concepts and isinstance(paper.concepts, list):
-                    concepts = ", ".join(paper.concepts[:3])
-                    if len(paper.concepts) > 3:
+                    concepts = ", ".join(paper.concepts[:2])
+                    if len(paper.concepts) > 2:
                         concepts += "..."
                 elif paper.concepts:
-                    concepts = str(paper.concepts)[:50]
+                    concepts = str(paper.concepts)[:30]
                 else:
                     concepts = "-"
 
                 # Truncate title if too long
                 title = paper.title
-                if len(title) > 60:
-                    title = title[:57] + "..."
+                if len(title) > 45:
+                    title = title[:42] + "..."
 
                 # Add row to table
-                table.add_row(title, status, concepts, key=paper.arxiv_id)
+                table.add_row(fav, bt_score, rel_score, title, status, concepts, key=paper.arxiv_id)
 
             self.papers = papers
 

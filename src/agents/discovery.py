@@ -529,6 +529,149 @@ def discover_papers_from_hn(
     return discovered_papers
 
 
+def import_papers_by_ids(
+    arxiv_ids: list[str],
+    discovered_by: str = "manual",
+    mark_favorite: bool = False,
+    mark_unread: bool = False,
+) -> list[Paper]:
+    """
+    Import specific papers by their arXiv IDs.
+
+    This is useful for manually adding papers you know you want to read,
+    or for importing seed papers for personalization.
+
+    Flow:
+    1. Filter out papers that already exist
+    2. Fetch metadata from arXiv API
+    3. Save to database with specified flags
+    4. Optionally mark as favorites
+    5. Optionally mark as unread (create ReadingProgress)
+
+    Args:
+        arxiv_ids: List of arXiv IDs to import (e.g., ["2501.12948", "2412.19437"])
+        discovered_by: Source label (default: "manual")
+        mark_favorite: Whether to mark papers as favorites (default: False)
+        mark_unread: Whether to create ReadingProgress with status="unread" (default: False)
+
+    Returns:
+        List of Paper objects that were imported or already existed
+
+    Example:
+        # Import papers and mark as favorites
+        papers = import_papers_by_ids(
+            arxiv_ids=["2501.12948", "2412.19437"],
+            mark_favorite=True,
+            mark_unread=True
+        )
+    """
+    from datetime import UTC, datetime
+
+    from src.models.paper import ReadingProgress
+
+    logger.info(
+        f"Importing {len(arxiv_ids)} papers by ID (mark_favorite={mark_favorite}, mark_unread={mark_unread})"
+    )
+
+    if not arxiv_ids:
+        logger.warning("No arXiv IDs provided")
+        return []
+
+    # Step 1: Check which papers already exist
+    with get_db_session() as db:
+        existing = db.query(Paper).filter(Paper.arxiv_id.in_(arxiv_ids)).all()
+        existing_ids = {p.arxiv_id for p in existing}
+
+    new_ids = [aid for aid in arxiv_ids if aid not in existing_ids]
+    logger.info(f"Papers to fetch: {len(new_ids)} new, {len(existing_ids)} already exist")
+
+    # Step 2: Fetch metadata from arXiv API for new papers
+    imported_papers = []
+
+    if new_ids:
+        try:
+            search = arxiv.Search(id_list=new_ids)
+
+            with get_db_session() as db:
+                for result in search.results():
+                    arxiv_id = result.entry_id.split("/")[-1]
+
+                    paper = Paper(
+                        arxiv_id=arxiv_id,
+                        title=result.title.strip(),
+                        abstract=result.summary.strip(),
+                        authors=[author.name for author in result.authors],
+                        published_date=result.published,
+                        categories=result.categories,
+                        pdf_url=result.pdf_url,
+                        abstract_url=result.entry_id,
+                        discovered_by=discovered_by,
+                        is_favorite=mark_favorite,
+                        favorited_at=datetime.now(UTC) if mark_favorite else None,
+                    )
+
+                    try:
+                        db.add(paper)
+                        db.flush()
+                        imported_papers.append(paper)
+                        logger.debug(f"Imported: {paper.title[:50]}...")
+                    except IntegrityError:
+                        db.rollback()
+                        logger.debug(f"Paper {arxiv_id} already exists (race condition)")
+                        # Add to existing_ids so we update it below
+                        existing_ids.add(arxiv_id)
+
+        except Exception as e:
+            logger.error(f"Failed to fetch papers from arXiv: {e}")
+            raise
+
+    # Step 3: Update existing papers if needed (mark_favorite, etc.)
+    if existing_ids and (mark_favorite or mark_unread):
+        with get_db_session() as db:
+            for arxiv_id in existing_ids:
+                paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+                if paper and mark_favorite and not paper.is_favorite:
+                    paper.is_favorite = True
+                    paper.favorited_at = datetime.now(UTC)
+                    logger.debug(f"Marked as favorite: {paper.title[:50]}...")
+
+    # Step 4: Create ReadingProgress records if mark_unread
+    if mark_unread:
+        with get_db_session() as db:
+            all_ids = list(existing_ids) + [p.arxiv_id for p in imported_papers]
+            for arxiv_id in all_ids:
+                # Check if ReadingProgress already exists
+                existing_progress = db.query(ReadingProgress).filter_by(paper_id=arxiv_id).first()
+
+                if not existing_progress:
+                    progress = ReadingProgress(
+                        paper_id=arxiv_id,
+                        status="unread",
+                    )
+                    db.add(progress)
+                    logger.debug(f"Created ReadingProgress for {arxiv_id}")
+
+    # Step 5: Return all papers (new + existing)
+    # Note: arXiv API returns IDs with version suffixes (e.g., "2501.12948v1")
+    # but user may provide base IDs (e.g., "2501.12948"), so we need to handle both
+    with get_db_session() as db:
+        # Build a LIKE query for each arxiv_id to match with or without version suffix
+        from sqlalchemy import or_
+
+        filters = []
+        for arxiv_id in arxiv_ids:
+            # Match exact ID or ID with version suffix
+            filters.append(Paper.arxiv_id == arxiv_id)
+            filters.append(Paper.arxiv_id.like(f"{arxiv_id}v%"))
+
+        all_papers = db.query(Paper).filter(or_(*filters)).all()
+
+    logger.info(
+        f"✅ Import complete! {len(imported_papers)} new papers, {len(existing_ids)} already existed"
+    )
+    return all_papers
+
+
 if __name__ == "__main__":
     # Test the discovery agent
     print("Testing arXiv Discovery Agent...")
