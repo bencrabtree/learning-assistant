@@ -2,7 +2,7 @@
 Curator Agent - Multi-Signal Paper Scoring and Ranking
 
 Scores and ranks papers using multiple signals:
-- Interest match (keyword matching against user interests)
+- Interest match (keyword matching against user interests + favorite concepts)
 - Social proof (HackerNews engagement)
 - Citation impact (Semantic Scholar data, age-adjusted)
 - Breakthrough potential (Claude assessment)
@@ -15,6 +15,11 @@ Scoring weights:
 
 Digest-worthy threshold:
 - Breakthrough score >= 0.8 OR aggregate score >= 0.7
+
+Seed Papers (Favorites):
+- Concepts from favorite papers are extracted and used for interest matching
+- Papers matching seed concepts get a bonus in interest scoring
+- Favorites with ReadingProgress status='unread' are always included in digest
 """
 
 from datetime import UTC, datetime, timedelta
@@ -35,30 +40,103 @@ WEIGHT_BREAKTHROUGH = 0.30
 DIGEST_WORTHY_AGGREGATE = 0.7
 DIGEST_WORTHY_BREAKTHROUGH = 0.8
 
+# Seed paper bonus weight
+SEED_CONCEPT_BONUS = 0.3  # 30% bonus for matching seed concepts
+
+
+def get_seed_concepts() -> list[str]:
+    """
+    Extract concepts from favorite (seed) papers.
+
+    Returns a list of unique concepts from all papers marked as favorites.
+    These concepts define what topics the user cares about most.
+    """
+    try:
+        with get_db_session() as db:
+            favorites = db.query(Paper).filter(Paper.is_favorite).all()
+
+            if not favorites:
+                return []
+
+            # Collect all concepts from favorites
+            seed_concepts = set()
+            for paper in favorites:
+                if paper.concepts:
+                    for concept in paper.concepts:
+                        # Normalize to lowercase for matching
+                        seed_concepts.add(concept.lower())
+
+            logger.debug(
+                f"Loaded {len(seed_concepts)} seed concepts from {len(favorites)} favorites"
+            )
+            return list(seed_concepts)
+    except Exception as e:
+        # Database may not exist in test environments
+        logger.debug(f"Could not load seed concepts (likely in test): {e}")
+        return []
+
 
 class CuratorAgent:
     """Agent that scores and ranks papers using multiple signals."""
 
-    def __init__(self, interests: list[str] | None = None):
-        """Initialize the Curator agent."""
+    def __init__(self, interests: list[str] | None = None, use_seed_concepts: bool = True):
+        """
+        Initialize the Curator agent.
+
+        Args:
+            interests: User interests from config (defaults to RESEARCH_INTERESTS)
+            use_seed_concepts: Whether to include concepts from favorite papers
+        """
         self.interests = interests or get_research_interests_list()
+        self.seed_concepts = get_seed_concepts() if use_seed_concepts else []
+        if self.seed_concepts:
+            logger.info(f"Using {len(self.seed_concepts)} seed concepts from favorites")
 
     def calculate_interest_score(self, paper: Paper) -> float:
-        """Calculate interest match score based on concept overlap."""
+        """
+        Calculate interest match score based on concept overlap.
+
+        Combines two signals:
+        1. Match against user's configured RESEARCH_INTERESTS
+        2. Match against concepts extracted from favorite (seed) papers
+
+        Papers matching seed concepts get a bonus because they're similar
+        to papers the user has explicitly marked as important.
+        """
         if not paper.concepts:
             return 0.0
 
         paper_concepts = [c.lower() for c in paper.concepts]
         user_interests = [i.lower() for i in self.interests]
 
-        matches = 0
+        # Score 1: Match against user interests (from config)
+        interest_matches = 0
         for interest in user_interests:
             for concept in paper_concepts:
                 if interest in concept or concept in interest:
-                    matches += 1
+                    interest_matches += 1
                     break
 
-        return matches / len(user_interests) if user_interests else 0.0
+        interest_score = interest_matches / len(user_interests) if user_interests else 0.0
+
+        # Score 2: Match against seed concepts (from favorites)
+        seed_matches = 0
+        if self.seed_concepts:
+            for seed_concept in self.seed_concepts:
+                for concept in paper_concepts:
+                    if seed_concept in concept or concept in seed_concept:
+                        seed_matches += 1
+                        break
+
+            seed_score = seed_matches / len(self.seed_concepts)
+        else:
+            seed_score = 0.0
+
+        # Combine: interest score + bonus for matching seed concepts
+        # Seed bonus rewards papers similar to what user explicitly liked
+        combined = interest_score + (SEED_CONCEPT_BONUS * seed_score)
+
+        return min(combined, 1.0)  # Cap at 1.0
 
     def calculate_social_score(self, paper: Paper) -> float:
         """Get combined social score from HN and Twitter signals.
@@ -202,3 +280,36 @@ def get_digest_worthy(papers: list[Paper]) -> list[Paper]:
         if paper.relevance_score is None:
             paper.relevance_score = curator.score_paper(paper)
     return curator.get_digest_worthy(papers)
+
+
+def get_unread_favorites() -> list[Paper]:
+    """
+    Get favorite papers that are still unread.
+
+    These are seed papers that should always be included in email digests
+    to ensure the user sees the papers they've explicitly marked as important.
+
+    Returns:
+        List of favorite papers with ReadingProgress status='unread' or no progress
+    """
+    from src.models.paper import ReadingProgress
+
+    try:
+        with get_db_session() as db:
+            # Get favorites that are either:
+            # 1. Have no ReadingProgress record (newly imported)
+            # 2. Have ReadingProgress with status='unread'
+            favorites = db.query(Paper).filter(Paper.is_favorite).all()
+
+            unread = []
+            for paper in favorites:
+                progress = db.query(ReadingProgress).filter_by(paper_id=paper.arxiv_id).first()
+                if not progress or progress.status == "unread":
+                    unread.append(paper)
+
+            logger.debug(f"Found {len(unread)}/{len(favorites)} unread favorites")
+            return unread
+    except Exception as e:
+        # Database may not exist in test environments
+        logger.debug(f"Could not load unread favorites (likely in test): {e}")
+        return []

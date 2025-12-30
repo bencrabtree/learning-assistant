@@ -541,6 +541,117 @@ def handle_radar_once(args):
         logger.warning(f"Errors: {results['errors']}")
 
 
+def handle_digest(args):
+    """
+    Send an email digest of top unread papers.
+
+    This command surfaces the best papers from your database:
+    1. Your seed papers (favorites) - always included if unread
+    2. Top unread papers by relevance score
+    3. Recently hot papers (high social engagement)
+
+    Examples:
+        python main.py --digest              # Send digest email
+        python main.py --digest --preview    # Preview without sending
+        python main.py --digest --top 10     # Include top 10 papers
+    """
+    from src.agents.curator import get_unread_favorites
+    from src.database import get_db_session
+    from src.models.paper import Paper, ReadingProgress
+    from src.services.email_notifier import EmailNotifier
+
+    preview = getattr(args, "preview", False)
+    top_n = getattr(args, "top", 5)
+
+    logger.info("Building email digest...")
+
+    # 1. Get unread seed papers (favorites)
+    seed_papers = get_unread_favorites()
+    seed_ids = {p.arxiv_id for p in seed_papers}
+    logger.info(f"Found {len(seed_papers)} unread seed papers")
+
+    # 2. Get top unread papers by relevance score (excluding seeds)
+    with get_db_session() as db:
+        # Get papers that are either:
+        # - Not in ReadingProgress (never seen)
+        # - In ReadingProgress with status='unread'
+        all_papers = (
+            db.query(Paper)
+            .filter(
+                Paper.relevance_score.isnot(None),
+                Paper.arxiv_id.notin_(seed_ids),  # Exclude seeds
+            )
+            .order_by(Paper.relevance_score.desc())
+            .limit(top_n * 3)  # Get more than needed to filter
+            .all()
+        )
+
+        # Filter to unread only
+        top_papers = []
+        for paper in all_papers:
+            progress = db.query(ReadingProgress).filter_by(paper_id=paper.arxiv_id).first()
+            if not progress or progress.status == "unread":
+                top_papers.append(paper)
+                if len(top_papers) >= top_n:
+                    break
+
+    logger.info(f"Found {len(top_papers)} top unread papers")
+
+    # 3. Preview or send
+    if preview:
+        print("\n" + "=" * 60)
+        print("📧 DIGEST PREVIEW")
+        print("=" * 60)
+
+        if seed_papers:
+            print("\n📌 YOUR SEED PAPERS:")
+            print("-" * 40)
+            for p in seed_papers:
+                score = f"{p.relevance_score:.0%}" if p.relevance_score else "N/A"
+                bt = f"{p.breakthrough_score:.0%}" if p.breakthrough_score else "N/A"
+                print(f"  • {p.title[:60]}...")
+                print(f"    Score: {score} | Breakthrough: {bt}")
+                print()
+
+        if top_papers:
+            print("\n🔍 TOP UNREAD PAPERS:")
+            print("-" * 40)
+            for i, p in enumerate(top_papers, 1):
+                score = f"{p.relevance_score:.0%}" if p.relevance_score else "N/A"
+                bt = f"{p.breakthrough_score:.0%}" if p.breakthrough_score else "N/A"
+                print(f"  {i}. {p.title[:60]}...")
+                print(f"     Score: {score} | Breakthrough: {bt}")
+                print()
+
+        total = len(seed_papers) + len(top_papers)
+        print(f"Total: {total} papers would be sent")
+        print("=" * 60)
+        print("Run without --preview to send email")
+
+    else:
+        # Send the digest
+        notifier = EmailNotifier()
+        if not notifier.is_configured():
+            logger.error("Email not configured. Check SMTP settings in .env")
+            sys.exit(1)
+
+        # send_paper_alert now handles seed papers automatically
+        success = notifier.send_paper_alert(
+            papers=top_papers,
+            reason="digest",
+            include_seed_papers=True,
+        )
+
+        if success:
+            total = len(seed_papers) + len(top_papers)
+            logger.info(
+                f"✅ Digest sent! {total} papers ({len(seed_papers)} seed, {len(top_papers)} top)"
+            )
+        else:
+            logger.error("❌ Failed to send digest")
+            sys.exit(1)
+
+
 def handle_test_email(args):
     """
     Test email configuration by sending a test message.
@@ -740,6 +851,82 @@ def handle_discover_hn(args):
         sys.exit(1)
 
 
+def handle_import(args):
+    """
+    Import specific papers by arXiv ID.
+
+    This allows you to manually add papers you know you want to read.
+    You can mark them as favorites and/or unread.
+
+    Example:
+        python main.py --import 2501.12948 2412.19437 --favorite --unread
+        python main.py --import 2501.12948 --favorite
+    """
+    from src.agents.discovery import import_papers_by_ids
+
+    arxiv_ids = args.import_ids
+    mark_favorite = args.favorite
+    mark_unread = args.unread
+
+    logger.info(f"Importing {len(arxiv_ids)} papers by ID...")
+
+    if not check_database_connection():
+        logger.error("Cannot connect to database!")
+        sys.exit(1)
+
+    try:
+        papers = import_papers_by_ids(
+            arxiv_ids=arxiv_ids,
+            mark_favorite=mark_favorite,
+            mark_unread=mark_unread,
+        )
+
+        if not papers:
+            logger.warning("No papers were imported")
+            return
+
+        # Display results
+        print("\n" + "=" * 80)
+        print(f"IMPORT RESULTS ({len(papers)} papers)")
+        print("=" * 80)
+
+        for i, paper in enumerate(papers, 1):
+            status = []
+            if paper.is_favorite:
+                status.append("⭐ Favorite")
+            if mark_unread:
+                status.append("📖 Unread")
+
+            status_str = " | ".join(status) if status else ""
+
+            print(f"\n{i}. {paper.title[:70]}...")
+            print(f"   ArXiv: {paper.arxiv_id}")
+            if status_str:
+                print(f"   Status: {status_str}")
+
+        print("\n" + "=" * 80)
+        logger.info(f"✅ Imported {len(papers)} papers")
+
+        # If user wants to analyze them, suggest the command
+        if args.analyze:
+            logger.info("Running analysis on imported papers...")
+            # Re-use the handle_analyze logic but only for these papers
+            from src.graph import run_analysis_pipeline
+
+            result = run_analysis_pipeline()
+            stats = result.get("stats", {})
+            logger.info(f"✅ Analyzed {stats.get('analyzed_count', 0)} papers")
+        else:
+            print("\nUse --analyze flag to analyze these papers immediately")
+            print("Or run: python main.py --analyze\n")
+
+    except Exception as e:
+        logger.error(f"❌ Import failed: {e}")
+        if settings.log_level == "DEBUG":
+            logger.exception("Full traceback:")
+        sys.exit(1)
+
+
 # ============================================================================
 # Utilities
 # ============================================================================
@@ -890,6 +1077,23 @@ Examples:
         help="Run a single radar scan (for testing)",
     )
     radar_group.add_argument(
+        "--digest",
+        action="store_true",
+        help="Send email digest of top unread papers from database",
+    )
+    radar_group.add_argument(
+        "--preview",
+        action="store_true",
+        help="Preview digest without sending email (use with --digest)",
+    )
+    radar_group.add_argument(
+        "--top",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of top papers to include in digest (default: 5)",
+    )
+    radar_group.add_argument(
         "--test-email",
         action="store_true",
         help="Test email configuration",
@@ -944,6 +1148,27 @@ Examples:
         help="Minimum HN score for --discover-hn (default: 10)",
     )
 
+    # ==================== MANUAL IMPORT ====================
+    import_group = parser.add_argument_group("Manual Import", "Import specific papers by arXiv ID")
+    import_group.add_argument(
+        "--import",
+        dest="import_ids",
+        type=str,
+        nargs="+",
+        metavar="ARXIV_ID",
+        help="Import specific papers by arXiv ID (e.g., --import 2501.12948 2412.19437)",
+    )
+    import_group.add_argument(
+        "--favorite",
+        action="store_true",
+        help="Mark imported papers as favorites (use with --import)",
+    )
+    import_group.add_argument(
+        "--unread",
+        action="store_true",
+        help="Mark imported papers as unread (use with --import)",
+    )
+
     # ==================== OTHER OPTIONS ====================
     other_group = parser.add_argument_group("Other")
     other_group.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -981,6 +1206,8 @@ Examples:
             handle_radar(args)
         elif args.radar_once:
             handle_radar_once(args)
+        elif args.digest:
+            handle_digest(args)
         elif args.test_email:
             handle_test_email(args)
         elif args.like:
@@ -993,6 +1220,8 @@ Examples:
             handle_feedback_server(args)
         elif args.discover_hn:
             handle_discover_hn(args)
+        elif args.import_ids:
+            handle_import(args)
         else:
             # No command specified, show help
             parser.print_help()

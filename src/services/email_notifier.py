@@ -3,6 +3,11 @@ Email Notification Service for Research Radar.
 
 Sends email alerts when noteworthy papers are discovered.
 Uses Gmail SMTP with app passwords for authentication.
+
+Seed Papers:
+- Unread favorite papers are always included at the top of the digest
+- These are papers the user has explicitly marked as important
+- They appear in a special "📌 Seed Papers" section
 """
 
 import smtplib
@@ -30,13 +35,19 @@ class EmailNotifier:
         """Check if email is properly configured."""
         return all([self.username, self.password, self.recipient])
 
-    def send_paper_alert(self, papers: list[Paper], reason: str = "noteworthy") -> bool:
+    def send_paper_alert(
+        self,
+        papers: list[Paper],
+        reason: str = "noteworthy",
+        include_seed_papers: bool = True,
+    ) -> bool:
         """
         Send an email alert about noteworthy papers.
 
         Args:
             papers: List of papers to include in the alert
             reason: Why these papers are noteworthy (e.g., "breakthrough", "trending")
+            include_seed_papers: Whether to include unread favorites at the top
 
         Returns:
             True if email sent successfully, False otherwise
@@ -45,36 +56,60 @@ class EmailNotifier:
             logger.warning("Email not configured - skipping notification")
             return False
 
-        if not papers:
+        # Get seed papers if requested
+        seed_papers: list[Paper] = []
+        if include_seed_papers:
+            from src.agents.curator import get_unread_favorites
+
+            seed_papers = get_unread_favorites()
+            # Remove seed papers from main list to avoid duplicates
+            seed_ids = {p.arxiv_id for p in seed_papers}
+            papers = [p for p in papers if p.arxiv_id not in seed_ids]
+
+        if not papers and not seed_papers:
             logger.debug("No papers to notify about")
             return True
 
         try:
-            msg = self._build_email(papers, reason)
+            msg = self._build_email(papers, reason, seed_papers=seed_papers)
             self._send_email(msg)
-            logger.info(f"Sent alert for {len(papers)} papers to {self.recipient}")
+            total = len(papers) + len(seed_papers)
+            logger.info(
+                f"Sent alert for {total} papers ({len(seed_papers)} seed, {len(papers)} discovered) to {self.recipient}"
+            )
             return True
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
             return False
 
-    def _build_email(self, papers: list[Paper], reason: str) -> MIMEMultipart:
+    def _build_email(
+        self,
+        papers: list[Paper],
+        reason: str,
+        seed_papers: list[Paper] | None = None,
+    ) -> MIMEMultipart:
         """Build the email message with HTML content."""
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = self._build_subject(papers, reason)
+        all_papers = (seed_papers or []) + papers
+        msg["Subject"] = self._build_subject(all_papers, reason, has_seed=bool(seed_papers))
         msg["From"] = self.username
         msg["To"] = self.recipient
 
         # Build HTML content
-        html = self._build_html(papers, reason)
-        text = self._build_plaintext(papers, reason)
+        html = self._build_html(papers, reason, seed_papers=seed_papers)
+        text = self._build_plaintext(papers, reason, seed_papers=seed_papers)
 
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
 
         return msg
 
-    def _build_subject(self, papers: list[Paper], reason: str) -> str:
+    def _build_subject(
+        self,
+        papers: list[Paper],
+        reason: str,
+        has_seed: bool = False,
+    ) -> str:
         """Build email subject line."""
         count = len(papers)
         if reason == "breakthrough":
@@ -87,52 +122,118 @@ class EmailNotifier:
             emoji = "📚"
             label = "Noteworthy"
 
+        if has_seed:
+            emoji = "📌"
+            label = "Research Radar"
+
         if count == 1:
             return f"{emoji} {label} Paper: {papers[0].title[:50]}..."
         return f"{emoji} {count} {label} Papers Found"
 
-    def _build_html(self, papers: list[Paper], reason: str) -> str:
+    def _build_html(
+        self,
+        papers: list[Paper],
+        reason: str,
+        seed_papers: list[Paper] | None = None,
+    ) -> str:
         """Build HTML email body."""
-        papers_html = ""
         feedback_url = settings.feedback_url
 
-        for i, paper in enumerate(papers, 1):
-            scores = self._format_scores(paper)
-            reasons = self._format_reasons(paper)
-            feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
+        # Build seed papers section (if any)
+        seed_html = ""
+        if seed_papers:
+            seed_html = """
+            <div style="margin-bottom: 32px;">
+                <h2 style="color: #1a1a1a; font-size: 18px; margin-bottom: 16px; display: flex; align-items: center;">
+                    📌 Your Seed Papers
+                    <span style="font-size: 12px; font-weight: normal; color: #666; margin-left: 8px;">
+                        (papers you marked as favorites)
+                    </span>
+                </h2>
+            """
+            for paper in seed_papers:
+                scores = self._format_scores(paper)
+                feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
 
-            # Build reasons section if we have reasons
-            reasons_html = ""
-            if reasons:
-                reasons_html = f"""
-                <div style="margin: 12px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 13px; color: #555;">
-                    <strong>Why this paper?</strong> {reasons}
+                seed_html += f"""
+                <div style="margin-bottom: 20px; padding: 16px; border: 2px solid #ffc107; border-radius: 8px; background: #fffef5;">
+                    <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
+                        {paper.title}
+                    </h3>
+                    <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
+                        {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
+                    </p>
+                    <p style="margin: 0 0 12px 0; color: #444; font-size: 14px;">
+                        {paper.eli5_summary or paper.abstract[:300]}{'...' if len(paper.abstract) > 300 else ''}
+                    </p>
+                    <div style="font-size: 13px; color: #888;">
+                        {scores}
+                    </div>
+                    <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px;">
+                        <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
+                            View on arXiv →
+                        </a>
+                        {feedback_buttons}
+                    </div>
                 </div>
                 """
+            seed_html += "</div>"
 
-            papers_html += f"""
-            <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
-                    {i}. {paper.title}
-                </h3>
-                <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
-                    {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
-                </p>
-                <p style="margin: 0 0 12px 0; color: #444; font-size: 14px;">
-                    {paper.eli5_summary or paper.abstract[:300]}{'...' if len(paper.abstract) > 300 else ''}
-                </p>
-                {reasons_html}
-                <div style="font-size: 13px; color: #888;">
-                    {scores}
-                </div>
-                <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px;">
-                    <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
-                        View on arXiv →
-                    </a>
-                    {feedback_buttons}
-                </div>
-            </div>
+        # Build discovered papers section
+        papers_html = ""
+        if papers:
+            papers_html = """
+            <div style="margin-bottom: 32px;">
+                <h2 style="color: #1a1a1a; font-size: 18px; margin-bottom: 16px;">
+                    🔍 New Discoveries
+                </h2>
             """
+            for i, paper in enumerate(papers, 1):
+                scores = self._format_scores(paper)
+                reasons = self._format_reasons(paper)
+                feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
+
+                # Build reasons section if we have reasons
+                reasons_html = ""
+                if reasons:
+                    reasons_html = f"""
+                    <div style="margin: 12px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 13px; color: #555;">
+                        <strong>Why this paper?</strong> {reasons}
+                    </div>
+                    """
+
+                papers_html += f"""
+                <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                    <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
+                        {i}. {paper.title}
+                    </h3>
+                    <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
+                        {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
+                    </p>
+                    <p style="margin: 0 0 12px 0; color: #444; font-size: 14px;">
+                        {paper.eli5_summary or paper.abstract[:300]}{'...' if len(paper.abstract) > 300 else ''}
+                    </p>
+                    {reasons_html}
+                    <div style="font-size: 13px; color: #888;">
+                        {scores}
+                    </div>
+                    <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px;">
+                        <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
+                            View on arXiv →
+                        </a>
+                        {feedback_buttons}
+                    </div>
+                </div>
+                """
+            papers_html += "</div>"
+
+        # Build intro text
+        if seed_papers and papers:
+            intro = f"Found {len(seed_papers)} seed paper{'s' if len(seed_papers) > 1 else ''} and {len(papers)} {reason} paper{'s' if len(papers) > 1 else ''} for you:"
+        elif seed_papers:
+            intro = f"Your {len(seed_papers)} seed paper{'s' if len(seed_papers) > 1 else ''} to review:"
+        else:
+            intro = f"Found {len(papers)} {reason} paper{'s' if len(papers) > 1 else ''} you should check out:"
 
         return f"""
         <!DOCTYPE html>
@@ -145,8 +246,9 @@ class EmailNotifier:
                 Research Radar Alert
             </h1>
             <p style="color: #666; margin-bottom: 24px;">
-                Found {len(papers)} {reason} paper{'s' if len(papers) > 1 else ''} you should check out:
+                {intro}
             </p>
+            {seed_html}
             {papers_html}
             <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 24px 0;">
             <p style="color: #888; font-size: 12px;">
@@ -157,27 +259,58 @@ class EmailNotifier:
         </html>
         """
 
-    def _build_plaintext(self, papers: list[Paper], reason: str) -> str:
+    def _build_plaintext(
+        self,
+        papers: list[Paper],
+        reason: str,
+        seed_papers: list[Paper] | None = None,
+    ) -> str:
         """Build plaintext email body for clients that don't support HTML."""
         lines = [
             "Research Radar Alert",
             "====================",
             "",
-            f"Found {len(papers)} {reason} paper{'s' if len(papers) > 1 else ''}:",
-            "",
         ]
 
-        for i, paper in enumerate(papers, 1):
-            reasons = self._format_reasons(paper)
-            paper_lines = [
-                f"{i}. {paper.title}",
-                f"   Authors: {', '.join(paper.authors[:3])}",
-                f"   {self._format_scores(paper)}",
-            ]
-            if reasons:
-                paper_lines.append(f"   Why this paper? {reasons}")
-            paper_lines.extend([f"   Link: {paper.abstract_url}", ""])
-            lines.extend(paper_lines)
+        # Seed papers section
+        if seed_papers:
+            lines.extend(
+                [
+                    "📌 YOUR SEED PAPERS",
+                    "-" * 40,
+                    "",
+                ]
+            )
+            for i, paper in enumerate(seed_papers, 1):
+                paper_lines = [
+                    f"{i}. {paper.title}",
+                    f"   Authors: {', '.join(paper.authors[:3])}",
+                    f"   {self._format_scores(paper)}",
+                    f"   Link: {paper.abstract_url}",
+                    "",
+                ]
+                lines.extend(paper_lines)
+
+        # Discovered papers section
+        if papers:
+            lines.extend(
+                [
+                    "🔍 NEW DISCOVERIES",
+                    "-" * 40,
+                    "",
+                ]
+            )
+            for i, paper in enumerate(papers, 1):
+                reasons = self._format_reasons(paper)
+                paper_lines = [
+                    f"{i}. {paper.title}",
+                    f"   Authors: {', '.join(paper.authors[:3])}",
+                    f"   {self._format_scores(paper)}",
+                ]
+                if reasons:
+                    paper_lines.append(f"   Why this paper? {reasons}")
+                paper_lines.extend([f"   Link: {paper.abstract_url}", ""])
+                lines.extend(paper_lines)
 
         return "\n".join(lines)
 

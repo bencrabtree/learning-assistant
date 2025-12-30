@@ -37,40 +37,69 @@ Transform the overwhelming flood of AI research into a **personalized, systemati
 
 ---
 
-## The Solution: Multi-Agent Learning Pipeline
+## The Solution: Personalized Research Pipeline
 
-This project builds an autonomous **multi-agent system** using:
-- **LangGraph** for workflow orchestration
-- **Claude AI** for deep paper analysis and explanation
-- **Multiple data sources** for discovery and ranking (arXiv, Twitter, Semantic Scholar)
-- **Knowledge graphs** for visualization and relationship mapping
+This project builds a **self-improving research assistant** with three core components:
 
-### High-Level Capabilities
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         RESEARCH PIPELINE                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   DISCOVERY              DATABASE                  DIGEST                │
+│   ─────────              ────────                  ──────                │
+│                                                                          │
+│   HackerNews ──┐                                                         │
+│   Twitter ─────┼──► Analyze ──► Score ──► Papers DB ──► Email Digest    │
+│   arXiv ───────┘     │            │           │              │           │
+│                      │            │           │              │           │
+│                      ▼            ▼           ▼              ▼           │
+│                  Concepts    Relevance   📌 Seed        Top Unread      │
+│                  Extracted   Ranked      Papers         Papers          │
+│                                                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         FEEDBACK LOOP                                    │
+│                                                                          │
+│   You ──► Like/Rate/Read Papers ──► Favorites inform scoring             │
+│                    │                                                     │
+│                    ▼                                                     │
+│            Future: GRPO fine-tuning on your preferences                  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-**Discovery & Analysis**
-- Automatically discover papers from arXiv daily
-- Extract structured information (claims, methodology, results)
-- Generate accessible explanations (ELI5 summaries, key insights)
-- Track citations and compute velocity (papers gaining momentum)
+### Core Architecture
 
-**Ranking & Curation**
-- Score by relevance to your research interests
-- Incorporate social proof (Twitter mentions, HackerNews discussions)
-- Detect trending papers before they become canonical
-- Filter noise, surface high-quality papers
+**1. Discovery Agent** - Finds papers from multiple sources
+- HackerNews (trending AI discussions)
+- Twitter/X (AI lab accounts, researchers)
+- arXiv (direct search by categories)
+- Cross-references to ensure papers are on arXiv
 
-**Learning Support**
-- Visual knowledge graphs showing paper relationships
-- Reading path recommendations (what to read first)
-- Progress tracking (papers read, concepts mastered)
-- Personalized recommendations based on your journey
-- Weekly synthesis reports (themes, insights, connections)
+**2. Analysis Pipeline** - Extracts and explains papers
+- Reader Agent (Claude Haiku) - Fast structured extraction
+- Explainer Agent (Claude Sonnet) - ELI5 summaries, key insights
+- Assessor Agent - Breakthrough detection (novelty, impact, evidence)
+- Curator Agent - Multi-signal scoring and ranking
 
-**Automation**
-- Fully autonomous operation (scheduled discovery & analysis)
-- Daily email digests with top papers
-- Weekly learning summaries
-- No manual intervention required
+**3. Digest System** - Surfaces best unread papers
+- **Single relevance score** combining all signals
+- **Seed papers** (your favorites) boost similar papers
+- Email digest with top unread + recently hot papers
+- Clean separation: discovery populates DB, digest reads from DB
+
+**4. Feedback Loop** - Your preferences improve recommendations
+- Like/favorite papers to mark as seed papers
+- Rate papers after reading (good/neutral/bad)
+- Mark reading status (unread → reading → finished)
+- Seed paper concepts influence future scoring
+
+### Why This Architecture?
+
+- **Decoupled**: Discovery runs independently from notifications
+- **Stateful**: Database is the source of truth, not transient API calls
+- **Personalized**: Your feedback directly shapes what gets surfaced
+- **Improvable**: Clear path to GRPO fine-tuning for personalization
 
 ---
 
@@ -107,14 +136,21 @@ python main.py --discover --days 1
 ### Basic Usage
 
 ```bash
-# 1. Run the core workflow - discover and analyze papers
-python main.py --discover --days 1 --analyze --max-papers 5
+# 1. Discover and analyze papers from the last 3 days
+python main.py --discover --days 3 --analyze --max-papers 10
 
-# 2. Explore interactively (RECOMMENDED!)
+# 2. Import specific papers you care about (seed papers)
+python main.py --import 2501.12948 2412.19437 --favorite --unread
+
+# 3. Send yourself a digest of top unread papers
+python main.py --digest --preview    # Preview first
+python main.py --digest              # Send email
+
+# 4. Explore interactively
 python main.py --explore
 ```
 
-That's it! The `--explore` command gives you a rich interactive interface to browse, read, and manage all your papers.
+**The key insight**: Discovery populates your database, then `--digest` emails you the best unread papers. Your favorites (seed papers) always appear first and boost similar papers in scoring.
 
 ### Interactive Explorer (`--explore`) - Recommended
 
@@ -479,7 +515,43 @@ python main.py --explore
 
 ## Future Enhancements
 
-**Beyond the 8 milestones**, potential extensions include:
+### Milestone 9: GRPO Personalization
+**Status:** 📋 Planned
+
+**Delivers:** Self-improving analysis agent that learns your preferences
+
+**The Vision:**
+Your feedback (likes, ratings, reading patterns) creates training data. Using GRPO (Group Relative Policy Optimization), we fine-tune the analysis agent to match your preferences:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GRPO PERSONALIZATION                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Your Favorites ──► Extract Preferences ──► GRPO Training      │
+│         │                    │                    │              │
+│         ▼                    ▼                    ▼              │
+│   "GRPO papers"      "Reasoning papers"    Fine-tuned           │
+│   "Test-time"        "Breakthrough tech"   Analysis Agent       │
+│   "Major releases"                                               │
+│                                                                  │
+│   Result: Agent learns what YOU find interesting                 │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key features:**
+- Collect preference data from favorites, ratings, reading time
+- Extract patterns: topics, writing styles, paper types you prefer
+- GRPO post-training on analysis agent using your preference data
+- Continuously improve as you provide more feedback
+- Personal model that gets better over time
+
+**Value:** Truly personalized research assistant that learns your taste
+
+---
+
+**Beyond the milestones**, potential extensions include:
 
 - **Multi-user support** - Team research collaboration
 - **Zotero/Mendeley integration** - Sync with existing tools
