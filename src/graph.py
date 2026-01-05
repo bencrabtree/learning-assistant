@@ -848,7 +848,7 @@ def run_discovery_only_pipeline(
         raise
 
 
-def run_analysis_pipeline() -> AgentState:
+def run_analysis_pipeline(paper_ids: list[str] | None = None) -> AgentState:
     """
     Run analysis pipeline on existing papers in database.
 
@@ -861,19 +861,37 @@ def run_analysis_pipeline() -> AgentState:
     Use this when you want to analyze papers that are already discovered
     but haven't been processed yet.
 
+    Args:
+        paper_ids: Optional list of specific arXiv IDs to analyze.
+                   If provided, only these papers will be analyzed (even if already analyzed).
+                   If None, all unanalyzed papers will be processed.
+
     Returns:
         Final state with analyzed and explained papers
 
     Example:
+        # Analyze all unanalyzed papers
         result = run_analysis_pipeline()
         count = result["stats"]["analyzed_count"]
         print(f"Analyzed {count} papers")
+
+        # Analyze specific papers
+        result = run_analysis_pipeline(paper_ids=["2507.11473v2"])
     """
     logger.info("🚀 Starting analysis pipeline...")
 
-    # Load unanalyzed papers from database
+    # Load papers from database
     with get_db_session() as db:
-        unanalyzed = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
+        if paper_ids:
+            # Analyze specific papers (regardless of analyzed_at status)
+            unanalyzed = db.query(Paper).filter(Paper.arxiv_id.in_(paper_ids)).all()
+            if len(unanalyzed) != len(paper_ids):
+                found_ids = {p.arxiv_id for p in unanalyzed}
+                missing = set(paper_ids) - found_ids
+                logger.warning(f"Papers not found in database: {missing}")
+        else:
+            # Analyze all unanalyzed papers
+            unanalyzed = db.query(Paper).filter(Paper.analyzed_at.is_(None)).all()
 
     if not unanalyzed:
         logger.info("No unanalyzed papers found")

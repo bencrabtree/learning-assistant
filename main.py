@@ -177,6 +177,59 @@ def handle_discover(args):
         sys.exit(1)
 
 
+def handle_analyze_paper(args):
+    """
+    Analyze a specific paper by arXiv ID.
+
+    This runs the same LangGraph analysis pipeline as --analyze,
+    but filtered to a single paper. Useful when you want to analyze
+    one paper without processing all unanalyzed papers.
+
+    Example:
+        python main.py --analyze-paper 2507.11473v2
+    """
+    arxiv_id = args.analyze_paper
+    logger.info(f"Analyzing specific paper: {arxiv_id}")
+
+    try:
+        # Use the same LangGraph workflow as handle_analyze, filtered to one paper
+        result = run_analysis_pipeline(paper_ids=[arxiv_id])
+
+        # Show results
+        stats = result.get("stats", {})
+        discovered = stats.get("discovered_count", 0)
+        analyzed = stats.get("analyzed_count", 0)
+        cached = stats.get("cached_count", 0)
+        explained = stats.get("explained_count", 0)
+
+        if discovered == 0:
+            logger.error(f"Paper not found: {arxiv_id}")
+            logger.info("Use --list to see available papers, or --import to add it first")
+            sys.exit(1)
+
+        logger.info("=" * 60)
+        logger.info(f"✅ Analysis complete for {arxiv_id}")
+        if cached > 0:
+            logger.info(f"  Analyzed:  {cached} (cached)")
+        else:
+            logger.info(f"  Analyzed:  {analyzed}")
+        logger.info(f"  Explained: {explained}")
+        logger.info("=" * 60)
+
+        print(f"\nRun: python main.py --show {arxiv_id}")
+        print("to see the full analysis.\n")
+
+        # Check for errors
+        if result.get("errors"):
+            logger.warning(f"Errors encountered: {result['errors']}")
+
+    except Exception as e:
+        logger.error(f"❌ Analysis failed: {e}")
+        if settings.log_level == "DEBUG":
+            logger.exception("Full traceback:")
+        sys.exit(1)
+
+
 def handle_analyze(args):
     """
     Analyze papers with Claude using LangGraph workflow.
@@ -1024,6 +1077,12 @@ Examples:
     pipeline_group.add_argument(
         "--analyze", action="store_true", help="Analyze papers with Claude AI"
     )
+    pipeline_group.add_argument(
+        "--analyze-paper",
+        type=str,
+        metavar="ARXIV_ID",
+        help="Analyze a specific paper by arXiv ID (e.g., --analyze-paper 2507.11473v2)",
+    )
 
     # ==================== PIPELINE PARAMETERS ====================
     params_group = parser.add_argument_group("Parameters", "Control pipeline behavior")
@@ -1192,6 +1251,8 @@ Examples:
             handle_init_db(args)
         elif args.discover:
             handle_discover(args)
+        elif args.analyze_paper:
+            handle_analyze_paper(args)
         elif args.analyze:
             handle_analyze(args)
         elif args.show:
