@@ -100,6 +100,11 @@ class CuratorAgent:
         1. Match against user's configured RESEARCH_INTERESTS
         2. Match against concepts extracted from favorite (seed) papers
 
+        Scoring is based on what fraction of the PAPER's concepts match user
+        interests, not what fraction of interests match. This rewards papers
+        that are highly relevant (most concepts match) without penalizing
+        users for having many interests.
+
         Papers matching seed concepts get a bonus because they're similar
         to papers the user has explicitly marked as important.
         """
@@ -109,26 +114,28 @@ class CuratorAgent:
         paper_concepts = [c.lower() for c in paper.concepts]
         user_interests = [i.lower() for i in self.interests]
 
-        # Score 1: Match against user interests (from config)
-        interest_matches = 0
-        for interest in user_interests:
-            for concept in paper_concepts:
+        # Score 1: What fraction of paper concepts match user interests?
+        # This rewards papers where most concepts are relevant to user
+        concept_matches = 0
+        for concept in paper_concepts:
+            for interest in user_interests:
                 if interest in concept or concept in interest:
-                    interest_matches += 1
+                    concept_matches += 1
                     break
 
-        interest_score = interest_matches / len(user_interests) if user_interests else 0.0
+        interest_score = concept_matches / len(paper_concepts)
 
         # Score 2: Match against seed concepts (from favorites)
+        # What fraction of paper concepts match seed concepts?
         seed_matches = 0
         if self.seed_concepts:
-            for seed_concept in self.seed_concepts:
-                for concept in paper_concepts:
+            for concept in paper_concepts:
+                for seed_concept in self.seed_concepts:
                     if seed_concept in concept or concept in seed_concept:
                         seed_matches += 1
                         break
 
-            seed_score = seed_matches / len(self.seed_concepts)
+            seed_score = seed_matches / len(paper_concepts)
         else:
             seed_score = 0.0
 
