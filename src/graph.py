@@ -918,14 +918,18 @@ def run_analysis_pipeline(paper_ids: list[str] | None = None) -> AgentState:
 
     logger.info(f"Found {len(unanalyzed)} unanalyzed papers")
 
-    # Create a simplified workflow (skip discovery)
+    # Create a simplified workflow (skip discovery, include scoring)
     workflow = StateGraph(AgentState)
     workflow.add_node("reader", reader_node)
     workflow.add_node("explainer", explainer_node)
+    workflow.add_node("assessor", assessor_node)
+    workflow.add_node("curator", curator_node)
 
     workflow.set_entry_point("reader")
     workflow.add_edge("reader", "explainer")
-    workflow.add_edge("explainer", END)
+    workflow.add_edge("explainer", "assessor")
+    workflow.add_edge("assessor", "curator")
+    workflow.add_edge("curator", END)
 
     app = workflow.compile()
 
