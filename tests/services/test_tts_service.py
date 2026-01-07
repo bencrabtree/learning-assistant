@@ -105,6 +105,59 @@ class TestOpenAITTSProvider:
             provider = OpenAITTSProvider()
             assert provider.is_configured() is False
 
+    @pytest.mark.asyncio
+    async def test_synthesize_success(self, tmp_path):
+        """Test successful OpenAI audio synthesis."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.openai_api_key = "sk-test-key"
+            provider = OpenAITTSProvider()
+            output_path = tmp_path / "test.mp3"
+
+            mock_response = MagicMock()
+            mock_response.stream_to_file = MagicMock()
+
+            mock_client = MagicMock()
+            mock_client.audio.speech.create = MagicMock(return_value=mock_response)
+
+            with patch.dict(
+                "sys.modules", {"openai": MagicMock(OpenAI=MagicMock(return_value=mock_client))}
+            ):
+                result = await provider.synthesize("Hello world", output_path)
+
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_synthesize_import_error(self, tmp_path):
+        """Test OpenAI synthesis handles missing package."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.openai_api_key = "sk-test-key"
+            provider = OpenAITTSProvider()
+            output_path = tmp_path / "test.mp3"
+
+            # Remove openai from modules to trigger ImportError
+            with patch.dict("sys.modules", {"openai": None}):
+                result = await provider.synthesize("Hello world", output_path)
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_synthesize_api_error(self, tmp_path):
+        """Test OpenAI synthesis handles API errors."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.openai_api_key = "sk-test-key"
+            provider = OpenAITTSProvider()
+            output_path = tmp_path / "test.mp3"
+
+            mock_client = MagicMock()
+            mock_client.audio.speech.create = MagicMock(side_effect=Exception("API Error"))
+
+            with patch.dict(
+                "sys.modules", {"openai": MagicMock(OpenAI=MagicMock(return_value=mock_client))}
+            ):
+                result = await provider.synthesize("Hello world", output_path)
+
+            assert result is False
+
 
 class TestTTSService:
     """Tests for TTS service."""
@@ -153,6 +206,20 @@ class TestTTSService:
             service = TTSService()
             # Will be True if edge-tts package is installed
             assert isinstance(service.is_configured(), bool)
+
+    def test_unknown_provider_returns_none(self):
+        """Test unknown TTS provider returns None."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.tts_enabled = True
+            mock_settings.tts_provider = "unknown_provider"
+            mock_settings.tts_voice = "test"
+            mock_settings.openai_api_key = None
+
+            with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+                mock_data_dir.return_value = Path("/tmp/test")
+                service = TTSService()
+                assert service.provider is None
+                assert service.is_configured() is False
 
     def test_get_audio_path_sanitizes_id(self, mock_settings_edge):
         """Test audio path sanitizes arXiv ID correctly."""
@@ -279,6 +346,88 @@ class TestTTSService:
             )
 
             assert result == audio_path
+
+    @pytest.mark.asyncio
+    async def test_generate_audio_success(self, mock_settings_edge, tmp_path):
+        """Test successful audio generation."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            (tmp_path / "audio").mkdir()
+
+            service = TTSService()
+            audio_path = service.get_audio_path("2312.99999")
+
+            # Mock the provider's synthesize method to create the file
+            async def mock_synthesize(text, path):
+                path.write_text("fake audio")
+                return True
+
+            service.provider.synthesize = mock_synthesize
+
+            result = await service.generate_audio(
+                arxiv_id="2312.99999",
+                title="Test Paper",
+                eli5_summary="Test summary",
+                key_insight="Test insight",
+            )
+
+            assert result == audio_path
+            assert audio_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_generate_audio_force_regenerate(self, mock_settings_edge, tmp_path):
+        """Test force flag regenerates audio even if cached."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            (tmp_path / "audio").mkdir()
+
+            service = TTSService()
+            audio_path = service.get_audio_path("2312.88888")
+
+            # Create existing audio file
+            audio_path.write_text("old audio")
+
+            # Mock synthesize to write new content
+            async def mock_synthesize(text, path):
+                path.write_text("new audio")
+                return True
+
+            service.provider.synthesize = mock_synthesize
+
+            result = await service.generate_audio(
+                arxiv_id="2312.88888",
+                title="Test Paper",
+                eli5_summary="Test summary",
+                key_insight="Test insight",
+                force=True,
+            )
+
+            assert result == audio_path
+            assert audio_path.read_text() == "new audio"
+
+    @pytest.mark.asyncio
+    async def test_generate_audio_provider_failure(self, mock_settings_edge, tmp_path):
+        """Test audio generation handles provider failure."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            (tmp_path / "audio").mkdir()
+
+            service = TTSService()
+
+            # Mock synthesize to fail
+            async def mock_synthesize(text, path):
+                return False
+
+            service.provider.synthesize = mock_synthesize
+
+            result = await service.generate_audio(
+                arxiv_id="2312.77777",
+                title="Test Paper",
+                eli5_summary="Test summary",
+                key_insight="Test insight",
+            )
+
+            assert result is None
 
     def test_generate_audio_sync_wrapper(self, mock_settings_disabled):
         """Test synchronous wrapper works correctly."""
