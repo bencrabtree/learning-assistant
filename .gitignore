@@ -18,6 +18,9 @@ logs/
 .mypy_cache/
 data/cache/*
 
+# Audio (generated TTS files)
+data/audio/
+
 # Coverage
 .coverage
 coverage.xml
