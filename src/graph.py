@@ -33,6 +33,7 @@ Example usage:
     papers = result["final_papers"]
 """
 
+from datetime import datetime
 from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -57,6 +58,7 @@ from src.agents.radar import (
 from src.agents.reader import analyze_papers_batch
 from src.database import get_db_session
 from src.models.paper import Paper
+from src.services.tts_service import TTSService
 from src.trackers.hackernews import fetch_hn_signals
 from src.trackers.twitter import fetch_twitter_signals
 
@@ -381,6 +383,86 @@ def explainer_node(state: AgentState) -> AgentState:
     return state
 
 
+def narrator_node(state: AgentState) -> AgentState:
+    """
+    Narrator Node - Generate audio narration for papers.
+
+    This node:
+    1. Reads explained papers from state
+    2. Generates audio narration using TTS service
+    3. Updates paper.audio_path in database
+
+    This node is optional - if TTS is not configured,
+    it will be skipped gracefully.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Updated state (papers unchanged, audio paths stored in DB)
+    """
+    logger.info("🎙️  Narrator Node - Generating audio narrations...")
+
+    tts = TTSService()
+
+    if not tts.is_configured():
+        logger.info("TTS not configured - skipping audio generation")
+        return state
+
+    try:
+        papers = state.get("explained_papers", [])
+
+        if not papers:
+            logger.warning("No papers to narrate")
+            return state
+
+        # Filter to papers that have explanations but no audio
+        papers_to_narrate = [p for p in papers if p.eli5_summary and not p.audio_path]
+
+        if not papers_to_narrate:
+            logger.info("All papers already have audio - skipping")
+            return state
+
+        logger.info(f"Generating audio for {len(papers_to_narrate)} papers...")
+
+        success_count = 0
+
+        for paper in papers_to_narrate:
+            audio_path = tts.generate_audio_sync(
+                arxiv_id=paper.arxiv_id,
+                title=paper.title,
+                eli5_summary=paper.eli5_summary,
+                key_insight=paper.key_insight or "",
+                main_claim=paper.main_claim,
+            )
+
+            if audio_path:
+                # Update database
+                with get_db_session() as db:
+                    db_paper = db.query(Paper).filter_by(arxiv_id=paper.arxiv_id).first()
+                    if db_paper:
+                        db_paper.audio_path = str(audio_path)
+                        db_paper.audio_generated_at = datetime.utcnow()
+                        # Also update the in-memory paper object
+                        paper.audio_path = str(audio_path)
+                success_count += 1
+
+        logger.info(f"✅ Generated audio for {success_count}/{len(papers_to_narrate)} papers")
+
+        # Update stats
+        if "stats" not in state or state["stats"] is None:
+            state["stats"] = {}
+        state["stats"]["audio_generated_count"] = success_count
+
+    except Exception as e:
+        logger.error(f"❌ Narrator node failed: {e}")
+        if "errors" not in state or state["errors"] is None:
+            state["errors"] = []
+        state["errors"].append(f"Narrator error: {e!s}")
+
+    return state
+
+
 def signal_node(state: AgentState) -> AgentState:
     """
     Signal Node - Fetch social signals from HackerNews and Twitter.
@@ -671,6 +753,7 @@ def create_workflow() -> StateGraph:
     workflow.add_node("discovery", discovery_node)
     workflow.add_node("reader", reader_node)
     workflow.add_node("explainer", explainer_node)
+    workflow.add_node("narrator", narrator_node)
     workflow.add_node("signals", signal_node)
     workflow.add_node("assessor", assessor_node)
     workflow.add_node("curator", curator_node)
@@ -682,7 +765,8 @@ def create_workflow() -> StateGraph:
     # Add sequential edges (A → B means "run B after A")
     workflow.add_edge("discovery", "reader")
     workflow.add_edge("reader", "explainer")
-    workflow.add_edge("explainer", "signals")
+    workflow.add_edge("explainer", "narrator")
+    workflow.add_edge("narrator", "signals")
     workflow.add_edge("signals", "assessor")
     workflow.add_edge("assessor", "curator")
 
@@ -694,7 +778,9 @@ def create_workflow() -> StateGraph:
     app = workflow.compile()
 
     logger.info("✅ Workflow built successfully!")
-    logger.info("Flow: START → Discovery → Reader → Explainer → Signals → Assessor → Curator → END")
+    logger.info(
+        "Flow: START → Discovery → Reader → Explainer → Narrator → Signals → Assessor → Curator → END"
+    )
 
     return app
 
@@ -922,12 +1008,14 @@ def run_analysis_pipeline(paper_ids: list[str] | None = None) -> AgentState:
     workflow = StateGraph(AgentState)
     workflow.add_node("reader", reader_node)
     workflow.add_node("explainer", explainer_node)
+    workflow.add_node("narrator", narrator_node)
     workflow.add_node("assessor", assessor_node)
     workflow.add_node("curator", curator_node)
 
     workflow.set_entry_point("reader")
     workflow.add_edge("reader", "explainer")
-    workflow.add_edge("explainer", "assessor")
+    workflow.add_edge("explainer", "narrator")
+    workflow.add_edge("narrator", "assessor")
     workflow.add_edge("assessor", "curator")
     workflow.add_edge("curator", END)
 

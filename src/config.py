@@ -206,6 +206,34 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # TTS Settings - Audio narration for digests
+    # ============================================================================
+
+    tts_enabled: bool = Field(
+        default=False,
+        alias="TTS_ENABLED",
+        description="Enable audio narration for paper summaries",
+    )
+
+    tts_provider: str = Field(
+        default="edge",
+        alias="TTS_PROVIDER",
+        description="TTS provider: 'edge' (free) or 'openai' (paid)",
+    )
+
+    tts_voice: str = Field(
+        default="en-US-AriaNeural",
+        alias="TTS_VOICE",
+        description="Voice to use for narration (provider-specific)",
+    )
+
+    openai_api_key: str | None = Field(
+        default=None,
+        alias="OPENAI_API_KEY",
+        description="OpenAI API key (required if using OpenAI TTS)",
+    )
+
+    # ============================================================================
     # Feedback Settings - For collecting user feedback
     # ============================================================================
 
