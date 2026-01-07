@@ -99,16 +99,20 @@ class TestInterestScoring:
     """Tests for interest match scoring."""
 
     def test_interest_score_full_match(self, sample_paper):
-        """Test interest score with full concept match."""
-        curator = CuratorAgent(interests=["transformers", "attention"])
+        """Test interest score when all paper concepts match interests."""
+        # Paper has 3 concepts: transformers, attention, deep learning
+        # All 3 match the interests below
+        curator = CuratorAgent(interests=["transformers", "attention", "deep learning"])
         score = curator.calculate_interest_score(sample_paper)
-        assert score == 1.0  # Both interests matched
+        assert score == 1.0  # 3/3 paper concepts matched
 
     def test_interest_score_partial_match(self, sample_paper):
         """Test interest score with partial match."""
+        # Paper has 3 concepts: transformers, attention, deep learning
+        # Only "transformers" matches
         curator = CuratorAgent(interests=["transformers", "robotics"])
         score = curator.calculate_interest_score(sample_paper)
-        assert score == 0.5  # Only one of two matched
+        assert abs(score - 1 / 3) < 0.01  # 1/3 paper concepts matched
 
     def test_interest_score_no_match(self, sample_paper):
         """Test interest score with no matches."""
