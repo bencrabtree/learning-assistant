@@ -34,6 +34,9 @@ pydantic_settings
 rich>=13.7.0
 textual>=0.47.0
 
+# Text-to-Speech
+edge-tts>=6.1.0
+
 # Testing & Quality
 pytest>=7.4.0
 pytest-cov>=4.1.0

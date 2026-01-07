@@ -193,6 +193,17 @@ class Paper(Base):
     assessed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------------------
+    # Audio Fields - Populated by Narrator Node
+    # ------------------------------------------------------------------------
+    # Audio narration of paper summaries for listening during commute
+
+    # Path to generated audio file (relative to data/audio/)
+    audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # When the audio was generated
+    audio_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ------------------------------------------------------------------------
     # User Preference Fields - For personalization
     # ------------------------------------------------------------------------
     # Seed papers that the user explicitly likes for training recommendations

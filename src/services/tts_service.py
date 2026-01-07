@@ -1,0 +1,340 @@
+"""
+Text-to-Speech Service for Research Radar.
+
+Generates audio narration for paper summaries.
+Supports multiple TTS providers with a unified interface.
+
+Usage:
+    from src.services.tts_service import TTSService
+
+    tts = TTSService()
+    if tts.is_configured():
+        audio_path = tts.generate_audio_sync(
+            arxiv_id="2312.12345",
+            title="Paper Title",
+            eli5_summary="Simple explanation...",
+            key_insight="The key point is...",
+        )
+"""
+
+import asyncio
+from abc import ABC, abstractmethod
+from pathlib import Path
+
+from loguru import logger
+
+from src.config import get_data_dir, settings
+
+
+class TTSProvider(ABC):
+    """Abstract base class for TTS providers."""
+
+    @abstractmethod
+    async def synthesize(self, text: str, output_path: Path) -> bool:
+        """
+        Generate audio from text.
+
+        Args:
+            text: The text to synthesize
+            output_path: Where to save the audio file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def is_configured(self) -> bool:
+        """Check if provider is properly configured."""
+        pass
+
+
+class EdgeTTSProvider(TTSProvider):
+    """
+    Microsoft Edge TTS provider.
+
+    Uses Microsoft's neural TTS via the edge-tts package.
+    Free, no API key required, excellent quality.
+
+    Recommended voices:
+    - en-US-AriaNeural (default) - Natural, friendly female
+    - en-US-JennyNeural - Professional female
+    - en-US-GuyNeural - Natural male
+    - en-US-DavisNeural - Deep male voice
+    """
+
+    def __init__(self, voice: str = "en-US-AriaNeural"):
+        self.voice = voice
+
+    def is_configured(self) -> bool:
+        """Edge TTS requires no configuration, just the package installed."""
+        try:
+            import edge_tts  # noqa: F401
+
+            return True
+        except ImportError:
+            logger.warning("edge-tts package not installed. Run: pip install edge-tts")
+            return False
+
+    async def synthesize(self, text: str, output_path: Path) -> bool:
+        """Generate audio using Edge TTS."""
+        try:
+            import edge_tts
+
+            communicate = edge_tts.Communicate(text, self.voice)
+            await communicate.save(str(output_path))
+
+            logger.debug(f"Generated audio: {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Edge TTS synthesis failed: {e}")
+            return False
+
+
+class OpenAITTSProvider(TTSProvider):
+    """
+    OpenAI TTS provider.
+
+    Uses OpenAI's tts-1 model for high-quality speech synthesis.
+    Paid service, requires OPENAI_API_KEY.
+
+    Recommended voices:
+    - nova (default) - Warm, engaging
+    - alloy - Neutral, clear
+    - echo - Deeper, authoritative
+    - fable - British accent
+    - onyx - Deep male voice
+    - shimmer - Soft female voice
+    """
+
+    def __init__(self, voice: str = "nova"):
+        self.voice = voice
+        self.api_key = settings.openai_api_key
+
+    def is_configured(self) -> bool:
+        """Check if OpenAI API key is configured."""
+        return bool(self.api_key)
+
+    async def synthesize(self, text: str, output_path: Path) -> bool:
+        """Generate audio using OpenAI TTS."""
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=self.api_key)
+
+            # OpenAI TTS is synchronous, run in thread pool
+            response = await asyncio.to_thread(
+                client.audio.speech.create,
+                model="tts-1",
+                voice=self.voice,
+                input=text,
+            )
+
+            # Stream to file
+            await asyncio.to_thread(response.stream_to_file, str(output_path))
+
+            logger.debug(f"Generated audio: {output_path}")
+            return True
+        except ImportError:
+            logger.error("openai package not installed. Run: pip install openai")
+            return False
+        except Exception as e:
+            logger.error(f"OpenAI TTS synthesis failed: {e}")
+            return False
+
+
+class TTSService:
+    """
+    Text-to-Speech service for generating paper narrations.
+
+    Follows the same pattern as EmailNotifier:
+    - Class-based with is_configured() validation
+    - Graceful fallback if not configured
+    - Configurable via .env
+
+    Example:
+        tts = TTSService()
+        if tts.is_configured():
+            path = tts.generate_audio_sync(...)
+    """
+
+    def __init__(self) -> None:
+        """Initialize the TTS service with configured provider."""
+        self.provider = self._get_provider()
+        self.audio_dir = get_data_dir() / "audio"
+        self.audio_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_provider(self) -> TTSProvider | None:
+        """Get the configured TTS provider based on settings."""
+        provider_name = settings.tts_provider.lower()
+
+        if provider_name == "edge":
+            return EdgeTTSProvider(voice=settings.tts_voice)
+        elif provider_name == "openai":
+            return OpenAITTSProvider(voice=settings.tts_voice)
+        else:
+            logger.warning(f"Unknown TTS provider: {provider_name}")
+            return None
+
+    def is_configured(self) -> bool:
+        """Check if TTS is properly configured and enabled."""
+        if not settings.tts_enabled:
+            return False
+        if not self.provider:
+            return False
+        return self.provider.is_configured()
+
+    def get_audio_path(self, arxiv_id: str) -> Path:
+        """
+        Get the path where audio file should be stored.
+
+        Args:
+            arxiv_id: The paper's arXiv ID
+
+        Returns:
+            Path to the audio file (may not exist yet)
+        """
+        # Sanitize arxiv_id for filename (replace special chars)
+        safe_id = arxiv_id.replace("/", "_").replace(":", "_")
+        return self.audio_dir / f"{safe_id}.mp3"
+
+    def audio_exists(self, arxiv_id: str) -> bool:
+        """Check if audio already exists for a paper."""
+        return self.get_audio_path(arxiv_id).exists()
+
+    def build_narration_script(
+        self,
+        title: str,
+        eli5_summary: str,
+        key_insight: str,
+        main_claim: str | None = None,
+    ) -> str:
+        """
+        Build the narration script from paper data.
+
+        Creates a natural-sounding script optimized for TTS:
+        - Title announcement
+        - ELI5 summary (main content)
+        - Key insight
+        - Optional: main claim if short enough
+
+        Args:
+            title: Paper title
+            eli5_summary: ELI5 explanation
+            key_insight: Key insight to remember
+            main_claim: Optional technical claim
+
+        Returns:
+            Text optimized for TTS narration
+        """
+        parts = []
+
+        # Title with natural pacing
+        parts.append(f"Paper summary: {title}.")
+        parts.append("")  # Creates a pause
+
+        # ELI5 Summary - the main content
+        if eli5_summary:
+            parts.append(eli5_summary)
+            parts.append("")
+
+        # Key Insight - the takeaway
+        if key_insight:
+            parts.append(f"The key insight is: {key_insight}")
+
+        # Main claim (only if short - avoid very technical jargon)
+        if main_claim and len(main_claim) < 300:
+            parts.append("")
+            parts.append(f"In technical terms: {main_claim}")
+
+        return "\n".join(parts)
+
+    async def generate_audio(
+        self,
+        arxiv_id: str,
+        title: str,
+        eli5_summary: str,
+        key_insight: str,
+        main_claim: str | None = None,
+        force: bool = False,
+    ) -> Path | None:
+        """
+        Generate audio narration for a paper.
+
+        Args:
+            arxiv_id: Paper's arXiv ID
+            title: Paper title
+            eli5_summary: ELI5 explanation
+            key_insight: Key insight
+            main_claim: Optional technical claim
+            force: Regenerate even if audio exists
+
+        Returns:
+            Path to audio file, or None if generation failed
+        """
+        if not self.is_configured():
+            logger.warning("TTS not configured - skipping audio generation")
+            return None
+
+        if not eli5_summary:
+            logger.warning(f"No eli5_summary for {arxiv_id} - skipping audio")
+            return None
+
+        output_path = self.get_audio_path(arxiv_id)
+
+        # Skip if already exists (caching)
+        if not force and output_path.exists():
+            logger.debug(f"Audio already exists: {output_path}")
+            return output_path
+
+        # Build script
+        script = self.build_narration_script(
+            title=title,
+            eli5_summary=eli5_summary,
+            key_insight=key_insight or "",
+            main_claim=main_claim,
+        )
+
+        logger.info(f"Generating audio for {arxiv_id}...")
+
+        # Generate audio - provider must not be None at this point
+        assert self.provider is not None
+        success = await self.provider.synthesize(script, output_path)
+
+        if success and output_path.exists():
+            file_size_kb = output_path.stat().st_size / 1024
+            logger.info(f"Generated audio: {output_path} ({file_size_kb:.1f} KB)")
+            return output_path
+        else:
+            logger.error(f"Failed to generate audio for {arxiv_id}")
+            return None
+
+    def generate_audio_sync(
+        self,
+        arxiv_id: str,
+        title: str,
+        eli5_summary: str,
+        key_insight: str,
+        main_claim: str | None = None,
+        force: bool = False,
+    ) -> Path | None:
+        """
+        Synchronous wrapper for generate_audio.
+
+        Use this when calling from synchronous code (e.g., LangGraph nodes).
+        """
+        return asyncio.run(
+            self.generate_audio(
+                arxiv_id=arxiv_id,
+                title=title,
+                eli5_summary=eli5_summary,
+                key_insight=key_insight,
+                main_claim=main_claim,
+                force=force,
+            )
+        )
+
+
+def get_tts_service() -> TTSService:
+    """Get a TTS service instance."""
+    return TTSService()
