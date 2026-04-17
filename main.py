@@ -604,17 +604,22 @@ def handle_digest(args):
     3. Recently hot papers (high social engagement)
 
     Examples:
-        python main.py --digest              # Send digest email
-        python main.py --digest --preview    # Preview without sending
-        python main.py --digest --top 10     # Include top 10 papers
+        python main.py --digest                       # Send digest email
+        python main.py --digest --preview             # Preview without sending
+        python main.py --digest --top 10              # Include top 10 papers
+        python main.py --digest --with-audio          # Include combined audio digest
     """
+    from datetime import date
+
     from src.agents.curator import get_unread_favorites
     from src.database import get_db_session
     from src.models.paper import Paper, ReadingProgress
     from src.services.email_notifier import EmailNotifier
+    from src.services.tts_service import get_tts_service
 
     preview = getattr(args, "preview", False)
     top_n = getattr(args, "top", 5)
+    with_audio = getattr(args, "with_audio", False)
 
     logger.info("Building email digest...")
 
@@ -678,6 +683,17 @@ def handle_digest(args):
 
         total = len(seed_papers) + len(top_papers)
         print(f"Total: {total} papers would be sent")
+
+        if with_audio:
+            tts = get_tts_service()
+            if tts.is_configured():
+                script = tts.build_digest_script(seed_papers + top_papers, date.today().isoformat())
+                print("\n🎧 DIGEST AUDIO SCRIPT:")
+                print("-" * 40)
+                print(script)
+            else:
+                print("\n⚠️  --with-audio set but TTS is not configured")
+
         print("=" * 60)
         print("Run without --preview to send email")
 
@@ -688,11 +704,28 @@ def handle_digest(args):
             logger.error("Email not configured. Check SMTP settings in .env")
             sys.exit(1)
 
+        digest_audio_url: str | None = None
+        if with_audio:
+            tts = get_tts_service()
+            if tts.is_configured():
+                digest_papers = seed_papers + top_papers
+                audio_result = tts.generate_digest_audio_sync(
+                    digest_papers, date.today().isoformat()
+                )
+                digest_audio_url = audio_result.public_url
+                if audio_result.success:
+                    logger.info(f"✅ Digest audio: {digest_audio_url or audio_result.local_path}")
+                else:
+                    logger.warning("Digest audio generation failed - sending without audio link")
+            else:
+                logger.warning("--with-audio set but TTS is not configured - skipping")
+
         # send_paper_alert now handles seed papers automatically
         success = notifier.send_paper_alert(
             papers=top_papers,
             reason="digest",
             include_seed_papers=True,
+            digest_audio_url=digest_audio_url,
         )
 
         if success:
@@ -1151,6 +1184,11 @@ Examples:
         default=5,
         metavar="N",
         help="Number of top papers to include in digest (default: 5)",
+    )
+    radar_group.add_argument(
+        "--with-audio",
+        action="store_true",
+        help="Generate a combined audio digest MP3 and link it at the top of the email",
     )
     radar_group.add_argument(
         "--test-email",

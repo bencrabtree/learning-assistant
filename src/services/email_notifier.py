@@ -42,6 +42,7 @@ class EmailNotifier:
         papers: list[Paper],
         reason: str = "noteworthy",
         include_seed_papers: bool = True,
+        digest_audio_url: str | None = None,
     ) -> bool:
         """
         Send an email alert about noteworthy papers.
@@ -50,6 +51,8 @@ class EmailNotifier:
             papers: List of papers to include in the alert
             reason: Why these papers are noteworthy (e.g., "breakthrough", "trending")
             include_seed_papers: Whether to include unread favorites at the top
+            digest_audio_url: Optional public URL for a combined audio digest.
+                When set, a "Listen to today's digest" banner is rendered at the top.
 
         Returns:
             True if email sent successfully, False otherwise
@@ -73,7 +76,12 @@ class EmailNotifier:
             return True
 
         try:
-            msg = self._build_email(papers, reason, seed_papers=seed_papers)
+            msg = self._build_email(
+                papers,
+                reason,
+                seed_papers=seed_papers,
+                digest_audio_url=digest_audio_url,
+            )
             self._send_email(msg)
             total = len(papers) + len(seed_papers)
             logger.info(
@@ -90,6 +98,7 @@ class EmailNotifier:
         reason: str,
         seed_papers: list[Paper] | None = None,
         attach_audio: bool = False,
+        digest_audio_url: str | None = None,
     ) -> MIMEMultipart:
         """Build the email message with HTML content.
 
@@ -102,8 +111,12 @@ class EmailNotifier:
         msg["To"] = self.recipient
 
         # Build HTML content with audio HTTP links
-        html = self._build_html(papers, reason, seed_papers=seed_papers)
-        text = self._build_plaintext(papers, reason, seed_papers=seed_papers)
+        html = self._build_html(
+            papers, reason, seed_papers=seed_papers, digest_audio_url=digest_audio_url
+        )
+        text = self._build_plaintext(
+            papers, reason, seed_papers=seed_papers, digest_audio_url=digest_audio_url
+        )
 
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
@@ -196,6 +209,7 @@ class EmailNotifier:
         papers: list[Paper],
         reason: str,
         seed_papers: list[Paper] | None = None,
+        digest_audio_url: str | None = None,
     ) -> str:
         """Build HTML email body."""
         feedback_url = settings.feedback_url
@@ -209,6 +223,16 @@ class EmailNotifier:
                 </a>
                 """
             return ""
+
+        digest_banner = ""
+        if digest_audio_url:
+            digest_banner = f"""
+            <div style="padding: 16px; background: #f3e5ff; border-radius: 8px; margin-bottom: 24px; text-align: center;">
+                <a href="{digest_audio_url}" style="color: #9c27b0; text-decoration: none; font-weight: 600; font-size: 16px;">
+                    🎧 Listen to today's digest
+                </a>
+            </div>
+            """
 
         # Build seed papers section (if any)
         seed_html = ""
@@ -323,6 +347,7 @@ class EmailNotifier:
             <p style="color: #666; margin-bottom: 24px;">
                 {intro}
             </p>
+            {digest_banner}
             {seed_html}
             {papers_html}
             <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 24px 0;">
@@ -339,6 +364,7 @@ class EmailNotifier:
         papers: list[Paper],
         reason: str,
         seed_papers: list[Paper] | None = None,
+        digest_audio_url: str | None = None,
     ) -> str:
         """Build plaintext email body for clients that don't support HTML."""
         lines = [
@@ -346,6 +372,9 @@ class EmailNotifier:
             "====================",
             "",
         ]
+
+        if digest_audio_url:
+            lines.extend([f"🎧 Listen to today's digest: {digest_audio_url}", ""])
 
         # Seed papers section
         if seed_papers:

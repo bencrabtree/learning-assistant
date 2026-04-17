@@ -5,11 +5,13 @@ These tests verify the TTS functionality without actually
 generating audio files (uses mocks).
 """
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.models.paper import Paper
 from src.services.tts_service import (
     EdgeTTSProvider,
     OpenAITTSProvider,
@@ -458,6 +460,183 @@ class TestTTSService:
             )
 
             assert not result.success  # Not configured
+
+
+def _make_paper(
+    arxiv_id: str = "2312.12345",
+    title: str = "Test Paper",
+    eli5_summary: str | None = "A simple explanation.",
+    key_insight: str | None = "The key point.",
+    main_claim: str | None = None,
+) -> Paper:
+    """Build a Paper instance with sensible defaults for digest tests."""
+    return Paper(
+        arxiv_id=arxiv_id,
+        title=title,
+        abstract="Test abstract",
+        authors=["Alice Smith"],
+        published_date=datetime(2026, 4, 17),
+        categories=["cs.AI"],
+        pdf_url=f"https://arxiv.org/pdf/{arxiv_id}",
+        abstract_url=f"https://arxiv.org/abs/{arxiv_id}",
+        eli5_summary=eli5_summary,
+        key_insight=key_insight,
+        main_claim=main_claim,
+    )
+
+
+class TestDigestAudio:
+    """Tests for digest script building and audio generation."""
+
+    @pytest.fixture
+    def mock_settings_edge(self):
+        """Create mock settings with Edge TTS enabled."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.tts_enabled = True
+            mock_settings.tts_provider = "edge"
+            mock_settings.tts_voice = "en-US-AriaNeural"
+            mock_settings.openai_api_key = None
+            yield mock_settings
+
+    @pytest.fixture
+    def mock_settings_disabled(self):
+        """Create mock settings with TTS disabled."""
+        with patch("src.services.tts_service.settings") as mock_settings:
+            mock_settings.tts_enabled = False
+            mock_settings.tts_provider = "edge"
+            mock_settings.tts_voice = "en-US-AriaNeural"
+            mock_settings.openai_api_key = None
+            yield mock_settings
+
+    def test_build_digest_script_contains_intro_and_outro(self, mock_settings_edge, tmp_path):
+        """Script starts with a dated intro and ends with an outro."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            script = service.build_digest_script([_make_paper()], "2026-04-17")
+
+            assert "2026-04-17" in script
+            assert "Good morning" in script
+            assert "Happy reading" in script
+
+    def test_build_digest_script_lists_all_papers_in_order(self, mock_settings_edge, tmp_path):
+        """Script enumerates papers in the supplied order."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            papers = [
+                _make_paper(arxiv_id="2312.00001", title="Alpha Paper"),
+                _make_paper(arxiv_id="2312.00002", title="Beta Paper"),
+                _make_paper(arxiv_id="2312.00003", title="Gamma Paper"),
+            ]
+            script = service.build_digest_script(papers, "2026-04-17")
+
+            alpha = script.index("Alpha Paper")
+            beta = script.index("Beta Paper")
+            gamma = script.index("Gamma Paper")
+            assert alpha < beta < gamma
+            assert "Paper 1:" in script
+            assert "Paper 2:" in script
+            assert "Paper 3:" in script
+
+    def test_build_digest_script_empty_papers_returns_just_intro_outro(
+        self, mock_settings_edge, tmp_path
+    ):
+        """With no papers, script still renders intro/outro and reports zero count."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            script = service.build_digest_script([], "2026-04-17")
+
+            assert "0 papers" in script
+            assert "Happy reading" in script
+            assert "Paper 1:" not in script
+
+    @pytest.mark.asyncio
+    async def test_generate_digest_audio_unconfigured_returns_empty_result(
+        self, mock_settings_disabled, tmp_path
+    ):
+        """Returns an empty AudioResult when TTS is disabled."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            result = await service.generate_digest_audio([_make_paper()], "2026-04-17")
+
+            assert not result.success
+            assert result.local_path is None
+            assert result.public_url is None
+
+    @pytest.mark.asyncio
+    async def test_generate_digest_audio_empty_papers_returns_empty_result(
+        self, mock_settings_edge, tmp_path
+    ):
+        """Returns an empty AudioResult when no papers supplied."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            result = await service.generate_digest_audio([], "2026-04-17")
+
+            assert not result.success
+
+    @pytest.mark.asyncio
+    async def test_generate_digest_audio_success_uploads_with_digests_prefix(
+        self, mock_settings_edge, tmp_path
+    ):
+        """Successful synthesis uploads to R2 under a digests/{date}.mp3 key."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            async def fake_synthesize(text, path):
+                path.write_bytes(b"fake mp3 bytes")
+                return True
+
+            service.provider.synthesize = fake_synthesize
+
+            with patch.object(
+                service,
+                "_upload_digest_to_r2",
+                return_value="https://pub-xxx.r2.dev/digests/2026-04-17.mp3",
+            ) as mock_upload:
+                result = await service.generate_digest_audio([_make_paper()], "2026-04-17")
+
+            assert result.success
+            assert result.local_path == service.get_digest_path("2026-04-17")
+            assert result.public_url == "https://pub-xxx.r2.dev/digests/2026-04-17.mp3"
+            mock_upload.assert_called_once()
+            _, called_key = mock_upload.call_args.args
+            assert called_key == "digests/2026-04-17.mp3"
+
+    @pytest.mark.asyncio
+    async def test_generate_digest_audio_uses_cache_when_exists(self, mock_settings_edge, tmp_path):
+        """When the digest MP3 already exists, synthesize is skipped but R2 is still called."""
+        with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
+            mock_data_dir.return_value = tmp_path
+            service = TTSService()
+
+            # Pre-create the cached digest file
+            digest_path = service.get_digest_path("2026-04-17")
+            digest_path.write_bytes(b"old mp3")
+
+            synth_mock = AsyncMock(return_value=True)
+            service.provider.synthesize = synth_mock
+
+            with patch.object(
+                service,
+                "_upload_digest_to_r2",
+                return_value="https://pub-xxx.r2.dev/digests/2026-04-17.mp3",
+            ) as mock_upload:
+                result = await service.generate_digest_audio([_make_paper()], "2026-04-17")
+
+            assert result.success
+            assert result.local_path == digest_path
+            synth_mock.assert_not_called()
+            mock_upload.assert_called_once()
 
 
 class TestGetTTSService:

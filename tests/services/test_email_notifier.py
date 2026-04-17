@@ -143,6 +143,25 @@ class TestEmailContent:
         assert sample_paper.abstract_url in text
         assert "Alice Smith" in text
 
+    def test_build_html_digest_banner_present_when_url_set(self, notifier, sample_paper):
+        """Digest audio banner renders when digest_audio_url is supplied."""
+        url = "https://pub-xxx.r2.dev/digests/2026-04-17.mp3"
+        html = notifier._build_html([sample_paper], "digest", digest_audio_url=url)
+        assert url in html
+        assert "Listen to today's digest" in html
+
+    def test_build_html_digest_banner_absent_when_url_none(self, notifier, sample_paper):
+        """Digest audio banner is omitted when no URL is supplied."""
+        html = notifier._build_html([sample_paper], "digest")
+        assert "Listen to today's digest" not in html
+
+    def test_build_plaintext_digest_link_present_when_url_set(self, notifier, sample_paper):
+        """Plaintext body includes digest listen link when URL supplied."""
+        url = "https://pub-xxx.r2.dev/digests/2026-04-17.mp3"
+        text = notifier._build_plaintext([sample_paper], "digest", digest_audio_url=url)
+        assert url in text
+        assert "Listen to today's digest" in text
+
     def test_format_scores_with_all_scores(self, notifier, sample_paper):
         """Test score formatting with all scores present."""
         scores = notifier._format_scores(sample_paper)

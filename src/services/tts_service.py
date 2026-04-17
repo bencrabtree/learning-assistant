@@ -27,6 +27,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.config import get_data_dir, settings
+from src.models.paper import Paper
 
 
 @dataclass
@@ -381,6 +382,95 @@ class TTSService:
                 force=force,
             )
         )
+
+    def get_digest_path(self, date_str: str) -> Path:
+        """Path where the daily digest MP3 is stored locally."""
+        digest_dir = self.audio_dir / "digests"
+        digest_dir.mkdir(parents=True, exist_ok=True)
+        return digest_dir / f"{date_str}.mp3"
+
+    def build_digest_script(self, papers: list[Paper], date_str: str) -> str:
+        """Build a single narration script covering multiple papers."""
+        parts = [
+            f"Good morning. Here is your arXiv digest for {date_str}.",
+            f"Today we have {len(papers)} papers.",
+            "",
+        ]
+
+        for i, paper in enumerate(papers, start=1):
+            parts.append(f"Paper {i}: {paper.title}.")
+            parts.append("")
+            if paper.eli5_summary:
+                parts.append(paper.eli5_summary)
+                parts.append("")
+            if paper.key_insight:
+                parts.append(f"The key insight is: {paper.key_insight}")
+            if paper.main_claim and len(paper.main_claim) < 300:
+                parts.append(f"In technical terms: {paper.main_claim}")
+            parts.append("")
+
+        parts.append("That's it for today. Happy reading.")
+        return "\n".join(parts)
+
+    async def generate_digest_audio(
+        self,
+        papers: list[Paper],
+        date_str: str,
+        force: bool = False,
+    ) -> AudioResult:
+        """Generate one MP3 covering all papers in the digest and upload to R2."""
+        if not self.is_configured():
+            logger.warning("TTS not configured - skipping digest audio")
+            return AudioResult()
+
+        if not papers:
+            logger.warning("No papers supplied for digest audio")
+            return AudioResult()
+
+        output_path = self.get_digest_path(date_str)
+        key = f"digests/{date_str}.mp3"
+
+        if not force and output_path.exists():
+            logger.debug(f"Digest audio already exists: {output_path}")
+            public_url = self._upload_digest_to_r2(output_path, key)
+            return AudioResult(local_path=output_path, public_url=public_url)
+
+        script = self.build_digest_script(papers, date_str)
+        logger.info(f"Generating digest audio for {len(papers)} papers → {output_path}")
+
+        success = await self.provider.synthesize(script, output_path)
+
+        if success and output_path.exists():
+            file_size_kb = output_path.stat().st_size / 1024
+            logger.info(f"Generated digest audio: {output_path} ({file_size_kb:.1f} KB)")
+            public_url = self._upload_digest_to_r2(output_path, key)
+            return AudioResult(local_path=output_path, public_url=public_url)
+
+        logger.error(f"Failed to generate digest audio for {date_str}")
+        return AudioResult()
+
+    def generate_digest_audio_sync(
+        self,
+        papers: list[Paper],
+        date_str: str,
+        force: bool = False,
+    ) -> AudioResult:
+        """Synchronous wrapper for generate_digest_audio."""
+        return asyncio.run(self.generate_digest_audio(papers, date_str, force=force))
+
+    def _upload_digest_to_r2(self, local_path: Path, key: str) -> str | None:
+        """Upload a digest file to R2 under a stable digests/ key."""
+        try:
+            from src.services.r2_storage import get_r2_storage
+
+            r2 = get_r2_storage()
+            if not r2.is_configured():
+                logger.debug("R2 not configured - skipping digest upload")
+                return None
+            return r2.upload_file(local_path, key)
+        except Exception as e:
+            logger.error(f"Failed to upload digest to R2: {e}")
+            return None
 
 
 def get_tts_service() -> TTSService:
