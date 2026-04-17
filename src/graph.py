@@ -390,7 +390,8 @@ def narrator_node(state: AgentState) -> AgentState:
     This node:
     1. Reads explained papers from state
     2. Generates audio narration using TTS service
-    3. Updates paper.audio_path in database
+    3. Uploads to R2 for public access (if configured)
+    4. Updates paper.audio_path and audio_url in database
 
     This node is optional - if TTS is not configured,
     it will be skipped gracefully.
@@ -428,7 +429,7 @@ def narrator_node(state: AgentState) -> AgentState:
         success_count = 0
 
         for paper in papers_to_narrate:
-            audio_path = tts.generate_audio_sync(
+            audio_result = tts.generate_audio_sync(
                 arxiv_id=paper.arxiv_id,
                 title=paper.title,
                 eli5_summary=paper.eli5_summary,
@@ -436,15 +437,17 @@ def narrator_node(state: AgentState) -> AgentState:
                 main_claim=paper.main_claim,
             )
 
-            if audio_path:
+            if audio_result.success:
                 # Update database
                 with get_db_session() as db:
                     db_paper = db.query(Paper).filter_by(arxiv_id=paper.arxiv_id).first()
                     if db_paper:
-                        db_paper.audio_path = str(audio_path)
+                        db_paper.audio_path = str(audio_result.local_path)
+                        db_paper.audio_url = audio_result.public_url
                         db_paper.audio_generated_at = datetime.utcnow()
                         # Also update the in-memory paper object
-                        paper.audio_path = str(audio_path)
+                        paper.audio_path = str(audio_result.local_path)
+                        paper.audio_url = audio_result.public_url
                 success_count += 1
 
         logger.info(f"✅ Generated audio for {success_count}/{len(papers_to_narrate)} papers")

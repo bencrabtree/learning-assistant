@@ -3,12 +3,18 @@ Minimal Feedback Server.
 
 A simple Flask server that handles feedback links from email notifications.
 Users click links in emails to rate papers as good/neutral/bad.
+
+Also serves audio files for paper narrations.
 """
 
-from flask import Flask
+from pathlib import Path
+
+from flask import Flask, send_file
 from loguru import logger
 
 from src.config import settings
+from src.database import get_db_session
+from src.models.paper import Paper
 from src.services.feedback import record_feedback
 
 app = Flask(__name__)
@@ -81,6 +87,37 @@ def handle_feedback(arxiv_id: str, rating: str):
 def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.route("/audio/<arxiv_id>")
+def serve_audio(arxiv_id: str):
+    """
+    Serve audio file for a paper.
+
+    URL format: /audio/<arxiv_id>
+    Returns the MP3 file for the paper's narration.
+    """
+    # Look up the paper to get its audio path
+    with get_db_session() as db:
+        paper = db.query(Paper).filter_by(arxiv_id=arxiv_id).first()
+
+        if not paper:
+            return {"error": f"Paper not found: {arxiv_id}"}, 404
+
+        if not paper.audio_path:
+            return {"error": f"No audio available for: {arxiv_id}"}, 404
+
+        audio_path = Path(paper.audio_path)
+        if not audio_path.exists():
+            return {"error": f"Audio file missing for: {arxiv_id}"}, 404
+
+        # Serve the file with proper MIME type
+        return send_file(
+            audio_path,
+            mimetype="audio/mpeg",
+            as_attachment=False,
+            download_name=f"{arxiv_id.replace('/', '_')}.mp3",
+        )
 
 
 def run_feedback_server(host: str = "0.0.0.0", port: int | None = None):  # nosec B104

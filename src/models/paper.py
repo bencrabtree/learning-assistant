@@ -197,8 +197,11 @@ class Paper(Base):
     # ------------------------------------------------------------------------
     # Audio narration of paper summaries for listening during commute
 
-    # Path to generated audio file (relative to data/audio/)
+    # Path to generated audio file (local cache, relative to data/audio/)
     audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Public URL for audio file (hosted on R2 for mobile access)
+    audio_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # When the audio was generated
     audio_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

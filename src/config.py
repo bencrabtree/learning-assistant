@@ -234,6 +234,40 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Cloudflare R2 Settings - For hosting audio files
+    # ============================================================================
+
+    r2_account_id: str | None = Field(
+        default=None,
+        alias="R2_ACCOUNT_ID",
+        description="Cloudflare account ID for R2 storage",
+    )
+
+    r2_access_key_id: str | None = Field(
+        default=None,
+        alias="R2_ACCESS_KEY_ID",
+        description="R2 API access key ID",
+    )
+
+    r2_secret_access_key: str | None = Field(
+        default=None,
+        alias="R2_SECRET_ACCESS_KEY",
+        description="R2 API secret access key",
+    )
+
+    r2_bucket_name: str = Field(
+        default="arxiv-audio",
+        alias="R2_BUCKET_NAME",
+        description="R2 bucket name for audio files",
+    )
+
+    r2_public_url: str | None = Field(
+        default=None,
+        alias="R2_PUBLIC_URL",
+        description="Public URL for R2 bucket (e.g., https://pub-xxx.r2.dev)",
+    )
+
+    # ============================================================================
     # Feedback Settings - For collecting user feedback
     # ============================================================================
 

@@ -89,28 +89,26 @@ class EmailNotifier:
         papers: list[Paper],
         reason: str,
         seed_papers: list[Paper] | None = None,
-        attach_audio: bool = True,
+        attach_audio: bool = False,
     ) -> MIMEMultipart:
-        """Build the email message with HTML content and optional audio attachments."""
-        # Use "mixed" to support attachments alongside text/html
-        msg = MIMEMultipart("mixed")
+        """Build the email message with HTML content.
+
+        Audio is now served via HTTP links instead of attachments for mobile compatibility.
+        """
+        msg = MIMEMultipart("alternative")
         all_papers = (seed_papers or []) + papers
         msg["Subject"] = self._build_subject(all_papers, reason, has_seed=bool(seed_papers))
         msg["From"] = self.username
         msg["To"] = self.recipient
 
-        # Create alternative part for HTML/text content
-        alternative = MIMEMultipart("alternative")
-
-        # Build HTML content
+        # Build HTML content with audio HTTP links
         html = self._build_html(papers, reason, seed_papers=seed_papers)
         text = self._build_plaintext(papers, reason, seed_papers=seed_papers)
 
-        alternative.attach(MIMEText(text, "plain"))
-        alternative.attach(MIMEText(html, "html"))
-        msg.attach(alternative)
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
 
-        # Attach audio files if available
+        # Optionally attach audio files (disabled by default for smaller emails)
         if attach_audio:
             audio_count = 0
             for paper in all_papers:
@@ -121,13 +119,16 @@ class EmailNotifier:
 
         return msg
 
-    def _attach_audio(self, msg: MIMEMultipart, paper: Paper) -> bool:
+    def _attach_audio(
+        self, msg: MIMEMultipart, paper: Paper, content_id: str | None = None
+    ) -> bool:
         """
         Attach audio file for a paper if it exists.
 
         Args:
             msg: The email message to attach to
             paper: The paper with potential audio_path
+            content_id: Optional Content-ID for inline linking via cid: URLs
 
         Returns:
             True if audio was attached, False otherwise
@@ -151,6 +152,10 @@ class EmailNotifier:
             safe_id = paper.arxiv_id.replace("/", "_").replace(":", "_")
             filename = f"paper_{safe_id}.mp3"
             audio.add_header("Content-Disposition", "attachment", filename=filename)
+
+            # Add Content-ID for inline linking if provided
+            if content_id:
+                audio.add_header("Content-ID", f"<{content_id}>")
 
             msg.attach(audio)
             logger.debug(f"Attached audio for {paper.arxiv_id}")
@@ -195,6 +200,16 @@ class EmailNotifier:
         """Build HTML email body."""
         feedback_url = settings.feedback_url
 
+        def _audio_link(paper: Paper) -> str:
+            """Generate audio link if paper has public audio URL."""
+            if paper.audio_url:
+                return f"""
+                <a href="{paper.audio_url}" style="color: #9c27b0; text-decoration: none; font-weight: 500;">
+                    🎧 Listen
+                </a>
+                """
+            return ""
+
         # Build seed papers section (if any)
         seed_html = ""
         if seed_papers:
@@ -210,12 +225,12 @@ class EmailNotifier:
             for paper in seed_papers:
                 scores = self._format_scores(paper)
                 feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
-                audio_icon = "🎧 " if paper.audio_path else ""
+                audio_link = _audio_link(paper)
 
                 seed_html += f"""
                 <div style="margin-bottom: 20px; padding: 16px; border: 2px solid #ffc107; border-radius: 8px; background: #fffef5;">
                     <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
-                        {audio_icon}{paper.title}
+                        {paper.title}
                     </h3>
                     <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
                         {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
@@ -230,6 +245,7 @@ class EmailNotifier:
                         <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
                             View on arXiv →
                         </a>
+                        {audio_link}
                         {feedback_buttons}
                     </div>
                 </div>
@@ -249,7 +265,7 @@ class EmailNotifier:
                 scores = self._format_scores(paper)
                 reasons = self._format_reasons(paper)
                 feedback_buttons = self._build_feedback_buttons(paper.arxiv_id, feedback_url)
-                audio_icon = "🎧 " if paper.audio_path else ""
+                audio_link = _audio_link(paper)
 
                 # Build reasons section if we have reasons
                 reasons_html = ""
@@ -263,7 +279,7 @@ class EmailNotifier:
                 papers_html += f"""
                 <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
                     <h3 style="margin: 0 0 8px 0; color: #1a1a1a;">
-                        {audio_icon}{i}. {paper.title}
+                        {i}. {paper.title}
                     </h3>
                     <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
                         {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
@@ -279,6 +295,7 @@ class EmailNotifier:
                         <a href="{paper.abstract_url}" style="color: #0066cc; text-decoration: none;">
                             View on arXiv →
                         </a>
+                        {audio_link}
                         {feedback_buttons}
                     </div>
                 </div>

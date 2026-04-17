@@ -6,6 +6,7 @@ anthropic>=0.18.0
 # Data and Storage
 sqlalchemy>=2.0.0
 redis>=5.0.0
+boto3>=1.34.0
 
 # Discovery APIs
 arxiv>=2.1.0

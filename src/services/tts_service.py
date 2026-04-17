@@ -9,21 +9,37 @@ Usage:
 
     tts = TTSService()
     if tts.is_configured():
-        audio_path = tts.generate_audio_sync(
+        result = tts.generate_audio_sync(
             arxiv_id="2312.12345",
             title="Paper Title",
             eli5_summary="Simple explanation...",
             key_insight="The key point is...",
         )
+        # result.local_path = local file path
+        # result.public_url = R2 URL (if configured)
 """
 
 import asyncio
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
 
 from src.config import get_data_dir, settings
+
+
+@dataclass
+class AudioResult:
+    """Result of audio generation."""
+
+    local_path: Path | None = None
+    public_url: str | None = None
+
+    @property
+    def success(self) -> bool:
+        """Check if audio was generated successfully."""
+        return self.local_path is not None
 
 
 class TTSProvider(ABC):
@@ -257,9 +273,9 @@ class TTSService:
         key_insight: str,
         main_claim: str | None = None,
         force: bool = False,
-    ) -> Path | None:
+    ) -> AudioResult:
         """
-        Generate audio narration for a paper.
+        Generate audio narration for a paper and optionally upload to R2.
 
         Args:
             arxiv_id: Paper's arXiv ID
@@ -270,22 +286,24 @@ class TTSService:
             force: Regenerate even if audio exists
 
         Returns:
-            Path to audio file, or None if generation failed
+            AudioResult with local_path and public_url (if R2 configured)
         """
         if not self.is_configured():
             logger.warning("TTS not configured - skipping audio generation")
-            return None
+            return AudioResult()
 
         if not eli5_summary:
             logger.warning(f"No eli5_summary for {arxiv_id} - skipping audio")
-            return None
+            return AudioResult()
 
         output_path = self.get_audio_path(arxiv_id)
 
         # Skip if already exists (caching)
         if not force and output_path.exists():
             logger.debug(f"Audio already exists: {output_path}")
-            return output_path
+            # Still try to get/upload R2 URL
+            public_url = self._upload_to_r2(output_path, arxiv_id)
+            return AudioResult(local_path=output_path, public_url=public_url)
 
         # Build script
         script = self.build_narration_script(
@@ -304,9 +322,39 @@ class TTSService:
         if success and output_path.exists():
             file_size_kb = output_path.stat().st_size / 1024
             logger.info(f"Generated audio: {output_path} ({file_size_kb:.1f} KB)")
-            return output_path
+
+            # Upload to R2 for public access
+            public_url = self._upload_to_r2(output_path, arxiv_id)
+
+            return AudioResult(local_path=output_path, public_url=public_url)
         else:
             logger.error(f"Failed to generate audio for {arxiv_id}")
+            return AudioResult()
+
+    def _upload_to_r2(self, local_path: Path, arxiv_id: str) -> str | None:
+        """
+        Upload audio to R2 and return public URL.
+
+        Args:
+            local_path: Path to local audio file
+            arxiv_id: Paper ID for constructing the key
+
+        Returns:
+            Public URL or None if R2 not configured
+        """
+        try:
+            from src.services.r2_storage import get_r2_storage
+
+            r2 = get_r2_storage()
+            if not r2.is_configured():
+                logger.debug("R2 not configured - skipping upload")
+                return None
+
+            # Use arxiv_id as key (sanitized)
+            key = local_path.name  # e.g., "2312_12345.mp3"
+            return r2.upload_file(local_path, key)
+        except Exception as e:
+            logger.error(f"Failed to upload to R2: {e}")
             return None
 
     def generate_audio_sync(
@@ -317,7 +365,7 @@ class TTSService:
         key_insight: str,
         main_claim: str | None = None,
         force: bool = False,
-    ) -> Path | None:
+    ) -> AudioResult:
         """
         Synchronous wrapper for generate_audio.
 

@@ -162,6 +162,15 @@ class TestOpenAITTSProvider:
 class TestTTSService:
     """Tests for TTS service."""
 
+    @pytest.fixture(autouse=True)
+    def disable_r2_upload(self):
+        """Prevent tests from touching real R2."""
+        with patch(
+            "src.services.tts_service.TTSService._upload_to_r2",
+            return_value=None,
+        ):
+            yield
+
     @pytest.fixture
     def mock_settings_disabled(self):
         """Create mock settings with TTS disabled."""
@@ -294,7 +303,7 @@ class TestTTSService:
 
     @pytest.mark.asyncio
     async def test_generate_audio_when_not_configured(self, mock_settings_disabled):
-        """Test generate_audio returns None when not configured."""
+        """Test generate_audio returns unsuccessful AudioResult when not configured."""
         with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
             mock_data_dir.return_value = Path("/tmp/test")
             service = TTSService()
@@ -306,11 +315,12 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result is None
+            assert not result.success
+            assert result.local_path is None
 
     @pytest.mark.asyncio
     async def test_generate_audio_skips_empty_summary(self, mock_settings_edge):
-        """Test generate_audio returns None when eli5_summary is empty."""
+        """Test generate_audio returns unsuccessful AudioResult when eli5_summary is empty."""
         with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
             mock_data_dir.return_value = Path("/tmp/test")
             service = TTSService()
@@ -322,7 +332,8 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result is None
+            assert not result.success
+            assert result.local_path is None
 
     @pytest.mark.asyncio
     async def test_generate_audio_uses_cache(self, mock_settings_edge, tmp_path):
@@ -345,7 +356,8 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result == audio_path
+            assert result.success
+            assert result.local_path == audio_path
 
     @pytest.mark.asyncio
     async def test_generate_audio_success(self, mock_settings_edge, tmp_path):
@@ -371,7 +383,8 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result == audio_path
+            assert result.success
+            assert result.local_path == audio_path
             assert audio_path.exists()
 
     @pytest.mark.asyncio
@@ -402,7 +415,8 @@ class TestTTSService:
                 force=True,
             )
 
-            assert result == audio_path
+            assert result.success
+            assert result.local_path == audio_path
             assert audio_path.read_text() == "new audio"
 
     @pytest.mark.asyncio
@@ -427,10 +441,11 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result is None
+            assert not result.success
+            assert result.local_path is None
 
     def test_generate_audio_sync_wrapper(self, mock_settings_disabled):
-        """Test synchronous wrapper works correctly."""
+        """Test synchronous wrapper returns unsuccessful AudioResult when not configured."""
         with patch("src.services.tts_service.get_data_dir") as mock_data_dir:
             mock_data_dir.return_value = Path("/tmp/test")
             service = TTSService()
@@ -442,7 +457,7 @@ class TestTTSService:
                 key_insight="Test insight",
             )
 
-            assert result is None  # Not configured
+            assert not result.success  # Not configured
 
 
 class TestGetTTSService:
